@@ -11,7 +11,6 @@
       background: #E2D9F3;
     }
 
-    /* wrap to control width in Squarespace */
     .map-wrapper {
       width: 75%;
       max-width: 900px;
@@ -132,7 +131,9 @@
       levels.forEach(({id,layer,minzoom,maxzoom})=>{
         map.addSource(`rc-src-${id}`,{type:'geojson',data:{type:'FeatureCollection',features:[]}});
         map.addLayer({
-          id:`rc-${id}-lines`, type:'line', source:`rc-src-${id}`,
+          id:`rc-${id}-lines`,
+          type:'line',
+          source:`rc-src-${id}`,
           minzoom, ...(maxzoom!==undefined?{maxzoom}:{})
           ,paint:{
             'line-color':[
@@ -148,7 +149,9 @@
           }
         });
         map.addLayer({
-          id:`rc-${id}-clicklines`, type:'line', source:`rc-src-${id}`,
+          id:`rc-${id}-clicklines`,
+          type:'line',
+          source:`rc-src-${id}`,
           paint:{'line-color':'rgba(0,0,0,0)','line-width':20}
         });
       });
@@ -156,8 +159,7 @@
         const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${layerId}/query?where=1=1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
         let all=[],offset=0,more=true;
         while(more){
-          const res=await fetch(base+`&resultOffset=${offset}`),
-                json=await res.json();
+          const res=await fetch(base+`&resultOffset=${offset}`), json=await res.json();
           all.push(...json.features);
           more=json.exceededTransferLimit;
           offset+=json.features.length;
@@ -168,40 +170,41 @@
       refresh();
       setInterval(refresh,60000);
 
-      // helper to add popups omitted for brevity…
-
-      // — Cameras (via CORS proxy) —
+      // Cameras
       map.addSource('cameras',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
       map.loadImage('https://cdn.jsdelivr.net/npm/ionicons@5.5.2/dist/svg/camera-outline.svg',(err,img)=>{
         if(err) return console.error(err);
         map.addImage('camera-icon',img);
         map.addLayer({
-          id:'camera-points', type:'symbol', source:'cameras', minzoom:8,
+          id:'camera-points',
+          type:'symbol',
+          source:'cameras',
+          minzoom:8,
           layout:{'icon-image':'camera-icon','icon-size':0.5,'icon-allow-overlap':true}
         });
       });
       fetch(CORS('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1'))
-        .then(r=>r.json())
-        .then(data=>{
-          const cams = Array.isArray(data) ? data : data.features||[];
+        .then(r=>r.json()).then(data=>{
+          const cams = Array.isArray(data)?data:data.features||[];
           const features = cams.map(cam=>{
             const lon=parseFloat(cam.Longitude??cam.Lon??cam.LONG),
                   lat=parseFloat(cam.Latitude ??cam.Lat ??cam.LAT);
             return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},properties:cam};
           });
           map.getSource('cameras').setData({type:'FeatureCollection',features});
-        })
-        .catch(e=>console.error('Camera fetch error:',e));
+        }).catch(e=>console.error('Camera fetch error:',e));
 
-      // — Weather stations (via CORS proxy) —
+      // Weather stations: only appear at zoom ≥ 10
       map.addSource('weather',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
       map.addLayer({
-        id:'weather-points', type:'symbol', source:'weather', minzoom:9,
+        id:'weather-points',
+        type:'symbol',
+        source:'weather',
+        minzoom:10,              // <— show only when zoomed in to 10+
         layout:{'text-field':'🌡️','text-size':24,'text-allow-overlap':true}
       });
       fetch(CORS('https://xmlweather.vedur.is/?op_w=xml&view=stations&format=json'))
-        .then(r=>r.json())
-        .then(data=>{
+        .then(r=>r.json()).then(data=>{
           const sts = data.stations||data.results||[];
           const features = sts.map(st=>{
             const lon=parseFloat(st.lon??st.Lon),
@@ -210,8 +213,7 @@
             return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},properties:{...st,id}};
           });
           map.getSource('weather').setData({type:'FeatureCollection',features});
-        })
-        .catch(e=>console.error('Station fetch error:',e));
+        }).catch(e=>console.error('Station fetch error:',e));
     });
   </script>
 </body>
