@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Iceland Road Conditions Map with User Location, Cameras & Weather</title>
+  <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      background: #E2D9F3;
+    }
+
+    /* wrap to control width in Squarespace */
+    .map-wrapper {
+      width: 75%;
+      max-width: 900px;
+      margin: 20px auto;
+    }
+
+    #iceland-map {
+      width: 100%;
+      height: 400px;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .maplibregl-popup-content {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      border-radius: 8px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+      padding: 12px 16px;
+      max-width: 280px;
+      font-size: 1rem;
+      line-height: 1.4;
+    }
+    .maplibregl-popup-tip { border-top-color: #fff; }
+    .popup-header { display: flex; align-items: center; margin-bottom: 8px; }
+    .status-icon { font-size: 1.5em; margin-right: 8px; }
+    .popup-row { margin: 6px 0; }
+    .popup-row strong { display: inline-block; width: 70px; }
+  </style>
+</head>
+<body>
+  <div class="map-wrapper">
+    <div id="iceland-map"></div>
+  </div>
+
+  <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+  <script>
+    console.log('Map container found?', !!document.getElementById('iceland-map'));
+
+    const map = new maplibregl.Map({
+      container: 'iceland-map',
+      style: {
+        version: 8,
+        sources: {
+          maptiler: {
+            type: 'vector',
+            url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=a3sOp8tuMrNynToqbxXE'
+          }
+        },
+        layers: [
+          { id: 'background', type: 'background', paint: { 'background-color': '#ffffff' } },
+          { id: 'water', type: 'fill', source: 'maptiler', 'source-layer': 'water', paint: { 'fill-color': '#aee6f9' } },
+          {
+            id: 'major-roads',
+            type: 'line',
+            source: 'maptiler',
+            'source-layer': 'transportation',
+            filter: ['all', ['!=','class','ferry'], ['in','class','motorway','trunk','primary']],
+            paint: {
+              'line-color': '#FFFFFF',
+              'line-width': ['interpolate',['linear'],['zoom'],0,1.5,5,3,10,6,14,12]
+            }
+          }
+        ]
+      },
+      center: [-19.02, 64.96],
+      zoom: 5.8
+    });
+
+    map.on('error', e => console.error('MapLibre error:', e));
+    map.on('load', () => {
+      console.log('✅ Map loaded successfully');
+
+      // controls
+      map.addControl(new maplibregl.NavigationControl());
+      map.addControl(new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserHeading: true
+      }), 'top-left');
+      map.setMaxBounds([[-30, 62], [-10, 67]]);
+
+      // Country label
+      map.addSource('country-label', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [-19.02, 64.96] },
+            properties: { name: 'Iceland' }
+          }]
+        }
+      });
+      map.addLayer({
+        id: 'country-label-layer',
+        type: 'symbol',
+        source: 'country-label',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': 48,
+          'text-anchor': 'center'
+        },
+        paint: {
+          'text-color': '#333333',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 2
+        },
+        minzoom: 0,
+        maxzoom: 6
+      });
+
+      // Road conditions
+      const levels = [
+        { id: 'low',  layer: 21, minzoom: 0,  maxzoom: 6  },
+        { id: 'mid',  layer: 22, minzoom: 5,  maxzoom: 11 },
+        { id: 'high', layer: 23, minzoom: 10 }
+      ];
+
+      levels.forEach(({ id, layer, minzoom, maxzoom }) => {
+        map.addSource(`rc-src-${id}`, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+        map.addLayer({
+          id: `rc-${id}-lines`,
+          type: 'line',
+          source: `rc-src-${id}`,
+          minzoom,
+          ...(maxzoom !== undefined ? { maxzoom } : {}),
+          paint: {
+            'line-color': [
+              'match', ['get','ASTAND_YFIRBORD'],
+              'EKKI_I_THJONUSTU','#9C9C9C','FAERT_FJALLABILUM','#03DF30',
+              'SNJOTHEKJA','#FFFFFF','HALKA','#00B7FF','LOKAD','#FF0000',
+              'HALKUBLETTIR','#FCA433','KRAP','#9C9C9C','OFAERT_ANNAD','#FF0000',
+              'OFAERT_VEDUR','#FF0000','OTHEKKT','#9C9C9C','FLUGHALT','#0000FF',
+              'GREIDFAERT','#00DF30','THAEFINGUR','#FD7EFC','THUNGFAERT','#3F3F3F',
+              '#000000'
+            ],
+            'line-width': [
+              'match', ['get','ASTAND_YFIRBORD'],
+              'EKKI_I_THJONUSTU', 1,
+              2
+            ]
+          }
+        });
+        map.addLayer({
+          id: `rc-${id}-clicklines`,
+          type: 'line',
+          source: `rc-src-${id}`,
+          paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': 20 }
+        });
+      });
+
+      async function fetchAllFeatures(layerId) {
+        const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${layerId}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+        let all = [], offset = 0, more = true;
+        while (more) {
+          const res = await fetch(base + `&resultOffset=${offset}`);
+          const json = await res.json();
+          all.push(...json.features);
+          more = json.exceededTransferLimit;
+          offset += json.features.length;
+        }
+        return { type: 'FeatureCollection', features: all };
+      }
+
+      const refreshRC = () => {
+        levels.forEach(({ id, layer }) => {
+          fetchAllFeatures(layer).then(fc => {
+            map.getSource(`rc-src-${id}`).setData(fc);
+          });
+        });
+      };
+      refreshRC();
+      setInterval(refreshRC, 60000);
+
+      const statusInfo = {
+        'SNJOTHEKJA': { icon: '❄️', label: 'Snow' },
+        'HALKA': { icon: '🧊', label: 'Slippery' },
+        'LOKAD': { icon: '⛔️', label: 'Closed' },
+        'FAERT_FJALLABILUM': { icon: '🚙', label: '4×4 Only' },
+        'GREIDFAERT': { icon: '🛣️', label: 'Passable' },
+        'HALKUBLETTIR': { icon: '⚠️', label: 'Icy Patches' },
+        'FLUGHALT': { icon: '✈️', label: 'Airport Halted' },
+        'KRAP': { icon: '🧊', label: 'Slush' },
+        'OFAERT_ANNAD': { icon: '🚫', label: 'Other Closure' },
+        'OFAERT_VEDUR': { icon: '🌧️', label: 'Weather Closure' },
+        'OTHEKKT': { icon: '❓', label: 'Unknown' },
+        'THAEFINGUR': { icon: '🌫️', label: 'Fog' },
+        'THUNGFAERT': { icon: '🐌', label: 'Heavy Traffic' }
+      };
+
+      // road click/hover
+      levels.map(l => `rc-${l.id}-clicklines`).forEach(id => {
+        map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+        map.on('click', id, e => {
+          const p = e.features[0].properties;
+          const info = statusInfo[p.ASTAND_YFIRBORD] || { icon: 'ℹ️', label: p.ASTAND_YFIRBORD };
+          new maplibregl.Popup({ offset: 12 })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <div class="popup-header">
+                <span class="status-icon">${info.icon}</span>
+                <strong>Road ${p.NRVEGUR}</strong>
+              </div>
+              <div class="popup-row">
+                <strong>Status:</strong> ${info.label}
+              </div>
+            `)
+            .addTo(map);
+        });
+      });
+
+      // Cameras
+      map.addSource('cameras', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      map.loadImage('https://cdn.jsdelivr.net/npm/ionicons@5.5.2/dist/svg/camera-outline.svg', (err, img) => {
+        if (err) return console.error('Icon load error:', err);
+        map.addImage('camera-icon', img);
+        map.addLayer({
+          id: 'camera-points',
+          type: 'symbol',
+          source: 'cameras',
+          minzoom: 8,
+          layout: {
+            'icon-image': 'camera-icon',
+            'icon-size': 0.5,
+            'icon-allow-overlap': true
+          }
+        });
+        map.on('mouseenter', 'camera-points', () => map.getCanvas().style.cursor = 'pointer');
+        map.on('mouseleave', 'camera-points', () => map.getCanvas().style.cursor = '');
+        map.on('click', 'camera-points', e => {
+          const props = e.features[0].properties;
+          new maplibregl.Popup({ offset: 12 })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <strong>Cam #${props.Maelist_nr}</strong><br/>
+              ${props.Skyring || ''}<br/>
+              <a href="${props.Slod}" target="_blank">View image</a>
+            `)
+            .addTo(map);
+        });
+
+        fetch('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1')
+          .then(res => res.json())
+          .then(data => {
+            console.log('RAW camera data:', data);
+            const cams = Array.isArray(data) ? data : data.features || [];
+            const features = cams.map(cam => {
+              const lon = parseFloat(cam.Longitude ?? cam.Lon ?? cam.LONG);
+              const lat = parseFloat(cam.Latitude  ?? cam.Lat ?? cam.LAT);
+              return {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [lon, lat] },
+                properties: cam
+              };
+            });
+            map.getSource('cameras').setData({ type: 'FeatureCollection', features });
+          })
+          .catch(e => console.error('Camera fetch error:', e));
+      });
+
+      // Weather stations
+      map.addSource('weather', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+      map.addLayer({
+        id: 'weather-points',
+        type: 'symbol',
+        source: 'weather',
+        minzoom: 9,
+        layout: {
+          'text-field': '🌡️',
+          'text-size': 24,
+          'text-allow-overlap': true
+        }
+      });
+      map.on('mouseenter', 'weather-points', () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', 'weather-points', () => map.getCanvas().style.cursor = '');
+      map.on('click', 'weather-points', async e => {
+        const stationID = e.features[0].properties.id;
+        try {
+          const resp = await fetch(`https://xmlweather.vedur.is/?op_w=xml&view=obs&ids=${stationID}&format=json`);
+          const json = await resp.json();
+          const obs = (json.results && json.results[0]) || json;
+          new maplibregl.Popup({ offset: 12 })
+            .setLngLat(e.lngLat)
+            .setHTML(`
+              <strong>${obs.name}</strong><br/>
+              🌡 Temp: ${obs.T} °C<br/>
+              💧 Dew: ${obs.TD} °C<br/>
+              💨 Wind: ${obs.FG} m/s
+            `)
+            .addTo(map);
+        } catch (err) {
+          console.error(err);
+        }
+      });
+
+      fetch('https://xmlweather.vedur.is/?op_w=xml&view=stations&format=json')
+        .then(res => res.json())
+        .then(data => {
+          console.log('RAW weather station data:', data);
+          const sts = data.stations || data.results || [];
+          const features = sts.map(st => {
+            const lon = parseFloat(st.lon ?? st.Lon);
+            const lat = parseFloat(st.lat ?? st.Lat);
+            const id  = st.id  ?? st.ID;
+            return {
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [lon, lat] },
+              properties: { ...st, id }
+            };
+          });
+          map.getSource('weather').setData({ type: 'FeatureCollection', features });
+        })
+        .catch(e => console.error('Station fetch error:', e));
+    });
+  </script>
+</body>
+</html>
