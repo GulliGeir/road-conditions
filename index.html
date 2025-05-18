@@ -5,12 +5,9 @@
   <title>Iceland Road Map</title>
   <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
-    html, body { margin:0; padding:0; height:100%; }
-    #map { width:100%; height:100%; }
-    .maplibregl-popup-content {
-      font-family: sans-serif;
-      padding: 10px;
-    }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    #map { width: 100%; height: 100%; }
+    .maplibregl-popup-content { font-family: sans-serif; padding: 10px; }
   </style>
 </head>
 <body>
@@ -25,112 +22,181 @@
       container: 'map',
       style: 'https://api.maptiler.com/maps/streets/style.json?key=a3sOp8tuMrNynToqbxXE',
       center: [-19.02, 64.96],
-      zoom: 6
+      zoom: 5.5
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+    const statusColors = {
+      'GREIDFAERT': '#00DF30',
+      'HALKA': '#00B7FF',
+      'HALKUBLETTIR': '#FCA433',
+      'LOKAD': '#FF0000',
+      'OFAERT_VEDUR': '#FF0000',
+      'OFAERT_ANNAD': '#FF0000',
+      'SNJOTHEKJA': '#FFFFFF',
+      'THAEFINGUR': '#FD7EFC',
+      'FAERT_FJALLABILUM': '#03DF30',
+      'THUNGFAERT': '#3F3F3F',
+      'KRAP': '#9C9C9C',
+      'OTHEKKT': '#9C9C9C',
+      'FLUGHALT': '#0000FF',
+      'EKKI_I_THJONUSTU': '#9C9C9C'
+    };
+
+    const statusLabels = {
+      'GREIDFAERT': 'Passable',
+      'HALKA': 'Slippery',
+      'HALKUBLETTIR': 'Icy Patches',
+      'LOKAD': 'Closed',
+      'OFAERT_VEDUR': 'Weather Closure',
+      'OFAERT_ANNAD': 'Other Closure',
+      'SNJOTHEKJA': 'Snow',
+      'THAEFINGUR': 'Fog',
+      'FAERT_FJALLABILUM': '4×4 Only',
+      'THUNGFAERT': 'Heavy Traffic',
+      'KRAP': 'Slush',
+      'OTHEKKT': 'Unknown',
+      'FLUGHALT': 'Airport Halted',
+      'EKKI_I_THJONUSTU': 'No Service'
+    };
+
     map.on('load', () => {
-      // Weather
+      //
+      // ROAD CONDITIONS (ArcGIS)
+      //
+      const arcgisLayers = [
+        { id: 'low',  layerId: 21, minzoom: 0,  maxzoom: 6 },
+        { id: 'mid',  layerId: 22, minzoom: 5,  maxzoom: 10 },
+        { id: 'high', layerId: 23, minzoom: 9 }
+      ];
+
+      arcgisLayers.forEach(({ id, layerId, minzoom, maxzoom }) => {
+        const sourceId = `road-${id}`;
+        map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
+        map.addLayer({
+          id: `${id}-line`,
+          type: 'line',
+          source: sourceId,
+          minzoom,
+          ...(maxzoom ? { maxzoom } : {}),
+          paint: {
+            'line-color': [
+              'match', ['get', 'ASTAND_YFIRBORD'],
+              ...Object.entries(statusColors).flat(),
+              '#000000'
+            ],
+            'line-width': 2
+          }
+        });
+
+        map.on('click', `${id}-line`, (e) => {
+          const p = e.features[0].properties;
+          const label = statusLabels[p.ASTAND_YFIRBORD] || p.ASTAND_YFIRBORD;
+          new maplibregl.Popup({ offset: 10 })
+            .setLngLat(e.lngLat)
+            .setHTML(`<strong>Road ${p.NRVEGUR}</strong><br>Status: ${label}`)
+            .addTo(map);
+        });
+
+        async function fetchRoads(layerId) {
+          const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${layerId}`;
+          const url = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+          let all = [], offset = 0, more = true;
+          while (more) {
+            const res = await fetch(`${url}&resultOffset=${offset}`);
+            const json = await res.json();
+            all.push(...json.features);
+            more = json.exceededTransferLimit;
+            offset += json.features.length;
+          }
+          return { type: 'FeatureCollection', features: all };
+        }
+
+        fetchRoads(layerId).then(data => {
+          map.getSource(sourceId).setData(data);
+        });
+      });
+
+      //
+      // WEATHER STATIONS
+      //
       map.addSource('wx', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
-        id: 'wx',
+        id: 'weather',
         type: 'symbol',
         source: 'wx',
         minzoom: 5,
         layout: {
           'text-field': ['concat', ['get', 'temp'], '°C'],
           'text-size': 14,
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-offset': [0, 0.6],
           'text-allow-overlap': true
         }
       });
 
-      map.on('click', 'wx', (e) => {
-        const p = e.features[0].properties;
-        new maplibregl.Popup({ offset: 10 })
-          .setLngLat(e.lngLat)
-          .setHTML(`<strong>${p.name}</strong><br>Temp: ${p.temp}°C`)
-          .addTo(map);
-      });
-
       async function loadWeather() {
-        try {
-          const response = await fetch(weatherURL);
-          const xmlText = await response.text();
-          const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
-          const items = Array.from(xml.getElementsByTagName('item'));
-          const features = items.map(item => ({
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: [
-                parseFloat(item.getElementsByTagName('Lengd')[0].textContent),
-                parseFloat(item.getElementsByTagName('Breidd')[0].textContent)
-              ]
-            },
-            properties: {
-              name: item.getElementsByTagName('Nafn')[0].textContent,
-              temp: item.getElementsByTagName('Hiti')[0]?.textContent || '—'
-            }
-          }));
-          map.getSource('wx').setData({ type: 'FeatureCollection', features });
-        } catch (err) {
-          console.error('Weather fetch error:', err);
-        }
+        const xml = await fetch(weatherURL).then(r => r.text());
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const items = [...doc.getElementsByTagName('item')];
+
+        const features = items.map(i => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [
+              parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
+              parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+            ]
+          },
+          properties: {
+            name: i.getElementsByTagName('Nafn')[0].textContent,
+            temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—'
+          }
+        }));
+
+        map.getSource('wx').setData({ type: 'FeatureCollection', features });
       }
 
-      // Cameras
+      //
+      // CAMERAS
+      //
       map.addSource('cams', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
         id: 'cams',
         type: 'symbol',
         source: 'cams',
-        minzoom: 5,
+        minzoom: 6,
         layout: {
           'text-field': '📷',
-          'text-size': 18,
+          'text-size': 20,
           'text-allow-overlap': true
         }
       });
 
-      map.on('click', 'cams', (e) => {
-        const p = e.features[0].properties;
-        new maplibregl.Popup({ offset: 10 })
-          .setLngLat(e.lngLat)
-          .setHTML(`
-            <strong>Cam #${p.Maelist_nr}</strong><br>
-            ${p.Skyring || ''}<br>
-            <a href="${p.Slod}" target="_blank">View image</a>
-          `)
-          .addTo(map);
-      });
-
       async function loadCameras() {
-        try {
-          const response = await fetch(cameraURL);
-          const xmlText = await response.text();
-          const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
-          const items = Array.from(xml.getElementsByTagName('item'));
-          const features = items.map(item => ({
-            type: 'Feature',
-            geometry: {
-              type: 'Point',
-              coordinates: [
-                parseFloat(item.getElementsByTagName('Lengd')[0].textContent),
-                parseFloat(item.getElementsByTagName('Breidd')[0].textContent)
-              ]
-            },
-            properties: {
-              Maelist_nr: item.getElementsByTagName('Maelist_nr')[0]?.textContent || '',
-              Skyring: item.getElementsByTagName('Skyring')[0]?.textContent || '',
-              Slod: item.getElementsByTagName('Slod')[0]?.textContent || ''
-            }
-          }));
-          map.getSource('cams').setData({ type: 'FeatureCollection', features });
-        } catch (err) {
-          console.error('Camera fetch error:', err);
-        }
+        const xml = await fetch(cameraURL).then(r => r.text());
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        const items = [...doc.getElementsByTagName('item')];
+
+        const features = items.map(i => ({
+          type: 'Feature',
+          geometry: {
+            type: 'Point',
+            coordinates: [
+              parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
+              parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+            ]
+          },
+          properties: {
+            Maelist_nr: i.getElementsByTagName('Maelist_nr')[0]?.textContent,
+            Skyring: i.getElementsByTagName('Skyring')[0]?.textContent,
+            Slod: i.getElementsByTagName('Slod')[0]?.textContent
+          }
+        }));
+
+        map.getSource('cams').setData({ type: 'FeatureCollection', features });
       }
 
       loadWeather();
