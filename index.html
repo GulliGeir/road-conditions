@@ -296,6 +296,12 @@
       });
     }
 
+    function removeHighlight() {
+  if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
+  if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
+}
+
+
     map.on('load', async () => {
       await loadWeather();
 
