@@ -63,23 +63,28 @@
     let weatherStations = [];
 
     async function loadWeather() {
-      try {
-        const xml = await fetch(weatherURL).then(r => r.text());
-        const doc = new DOMParser().parseFromString(xml, 'application/xml');
-        const items = [...doc.getElementsByTagName('item')];
+  try {
+    const response = await fetch(weatherURL);
+    const text = await response.text();
 
-        weatherStations = items.map(i => ({
-          name: i.getElementsByTagName('Nafn')[0].textContent,
-          temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—',
-          lon: parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
-          lat: parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
-        }));
+    console.log("🔁 Raw weather response:\n", text.slice(0, 500)); // print first 500 characters
 
-        console.log('✅ Weather stations loaded:', weatherStations.length);
-      } catch (err) {
-        console.error('❌ Weather load error:', err);
-      }
-    }
+    const doc = new DOMParser().parseFromString(text, 'application/xml');
+    const items = [...doc.getElementsByTagName('item')];
+
+    weatherStations = items.map(i => ({
+      name: i.getElementsByTagName('Nafn')[0]?.textContent || 'Unknown',
+      temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—',
+      lon: parseFloat(i.getElementsByTagName('Lengd')[0]?.textContent),
+      lat: parseFloat(i.getElementsByTagName('Breidd')[0]?.textContent)
+    })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
+
+    console.log('✅ Weather stations parsed:', weatherStations.length);
+  } catch (err) {
+    console.error('❌ Weather load error:', err);
+  }
+}
+
 
     function getNearestStation(lng, lat) {
       if (!weatherStations.length) return null;
