@@ -151,7 +151,7 @@ function getNearestStation(lng, lat) {
           .setHTML(`
             <strong>Road ${p.NRVEGUR}</strong><br>
             Condition: ${label}<br>
-            Temperature: ${nearest.temp}°C at ${nearest.name}
+            Temperature: ${tempText}
           `)
           .addTo(map);
       });
