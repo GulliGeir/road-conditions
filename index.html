@@ -2,124 +2,134 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Iceland Road Conditions Map</title>
-
+  <title>Iceland Road Map</title>
   <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; }
-    #map { width: 100%; height: 100%; }
-    .maplibregl-popup-content { font-family: sans-serif; padding: 8px; }
+    html, body { margin:0; padding:0; height:100%; }
+    #map { width:100%; height:100%; }
+    .maplibregl-popup-content {
+      font-family: sans-serif;
+      padding: 10px;
+    }
   </style>
 </head>
 <body>
   <div id="map"></div>
-
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
-    const proxyBase = 'https://road-conditions.vercel.app/api/proxy?url=';
-
-    const weatherURL = proxyBase + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
-    const cameraURL  = proxyBase + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1');
+    const proxy = 'https://road-conditions.vercel.app/api/proxy?url=';
+    const weatherURL = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
+    const cameraURL  = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1');
 
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://api.maptiler.com/maps/streets/style.json?key=a3sOp8tuMrNynToqbxXE',
       center: [-19.02, 64.96],
-      zoom: 5.3
+      zoom: 6
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     map.on('load', () => {
-      // WEATHER STATIONS
-      map.addSource('wx', { type:'geojson', data:{type:'FeatureCollection',features:[]} });
+      // Weather
+      map.addSource('wx', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
         id: 'wx',
         type: 'symbol',
         source: 'wx',
-        minzoom: 6,
+        minzoom: 5,
         layout: {
           'text-field': ['concat', ['get', 'temp'], '°C'],
           'text-size': 14,
-          'text-offset': [0, 0.6],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
           'text-allow-overlap': true
         }
       });
 
-      map.on('click', 'wx', e => {
+      map.on('click', 'wx', (e) => {
         const p = e.features[0].properties;
         new maplibregl.Popup({ offset: 10 })
           .setLngLat(e.lngLat)
-          .setHTML(`<strong>${p.name}</strong><br/>Temp: ${p.temp}°C`)
+          .setHTML(`<strong>${p.name}</strong><br>Temp: ${p.temp}°C`)
           .addTo(map);
       });
 
       async function loadWeather() {
         try {
-          const txt = await fetch(weatherURL).then(r => r.text());
-          const xml = new DOMParser().parseFromString(txt, 'application/xml');
+          const response = await fetch(weatherURL);
+          const xmlText = await response.text();
+          const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
           const items = Array.from(xml.getElementsByTagName('item'));
-          const feats = items.map(i => ({
+          const features = items.map(item => ({
             type: 'Feature',
             geometry: {
               type: 'Point',
               coordinates: [
-                parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
-                parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+                parseFloat(item.getElementsByTagName('Lengd')[0].textContent),
+                parseFloat(item.getElementsByTagName('Breidd')[0].textContent)
               ]
             },
             properties: {
-              name: i.getElementsByTagName('Nafn')[0].textContent,
-              temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—'
+              name: item.getElementsByTagName('Nafn')[0].textContent,
+              temp: item.getElementsByTagName('Hiti')[0]?.textContent || '—'
             }
           }));
-          map.getSource('wx').setData({ type: 'FeatureCollection', features: feats });
+          map.getSource('wx').setData({ type: 'FeatureCollection', features });
         } catch (err) {
-          console.error('Weather load error:', err);
+          console.error('Weather fetch error:', err);
         }
       }
 
-      // CAMERAS
-      map.addSource('cams', { type:'geojson', data:{type:'FeatureCollection',features:[]} });
+      // Cameras
+      map.addSource('cams', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
       map.addLayer({
-        id:'cams',
-        type:'symbol',
-        source:'cams',
-        minzoom:8,
-        layout:{ 'text-field':'📷','text-size':20,'text-allow-overlap':true }
+        id: 'cams',
+        type: 'symbol',
+        source: 'cams',
+        minzoom: 5,
+        layout: {
+          'text-field': '📷',
+          'text-size': 18,
+          'text-allow-overlap': true
+        }
       });
 
-      map.on('click', 'cams', e => {
+      map.on('click', 'cams', (e) => {
         const p = e.features[0].properties;
         new maplibregl.Popup({ offset: 10 })
           .setLngLat(e.lngLat)
-          .setHTML(`<strong>Cam #${p.Maelist_nr}</strong><br>${p.Skyring}<br><a href="${p.Slod}" target="_blank">View</a>`)
+          .setHTML(`
+            <strong>Cam #${p.Maelist_nr}</strong><br>
+            ${p.Skyring || ''}<br>
+            <a href="${p.Slod}" target="_blank">View image</a>
+          `)
           .addTo(map);
       });
 
       async function loadCameras() {
         try {
-          const txt = await fetch(cameraURL).then(r => r.text());
-          const xml = new DOMParser().parseFromString(txt, 'application/xml');
+          const response = await fetch(cameraURL);
+          const xmlText = await response.text();
+          const xml = new DOMParser().parseFromString(xmlText, 'application/xml');
           const items = Array.from(xml.getElementsByTagName('item'));
-          const feats = items.map(i => ({
+          const features = items.map(item => ({
             type: 'Feature',
             geometry: {
               type: 'Point',
               coordinates: [
-                parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
-                parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+                parseFloat(item.getElementsByTagName('Lengd')[0].textContent),
+                parseFloat(item.getElementsByTagName('Breidd')[0].textContent)
               ]
             },
             properties: {
-              Maelist_nr: i.getElementsByTagName('Maelist_nr')[0]?.textContent,
-              Skyring:    i.getElementsByTagName('Skyring')[0]?.textContent,
-              Slod:       i.getElementsByTagName('Slod')[0]?.textContent
+              Maelist_nr: item.getElementsByTagName('Maelist_nr')[0]?.textContent || '',
+              Skyring: item.getElementsByTagName('Skyring')[0]?.textContent || '',
+              Slod: item.getElementsByTagName('Slod')[0]?.textContent || ''
             }
           }));
-          map.getSource('cams').setData({ type: 'FeatureCollection', features: feats });
+          map.getSource('cams').setData({ type: 'FeatureCollection', features });
         } catch (err) {
-          console.error('Camera load error:', err);
+          console.error('Camera fetch error:', err);
         }
       }
 
