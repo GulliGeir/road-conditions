@@ -168,6 +168,22 @@
       }
     }
 
+    <button id="exit-fullscreen-btn" onclick="exitFullscreen()" style="
+  display: none;
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  z-index: 10;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+">Exit Fullscreen</button>
+
+
     let weatherStations = [];
 
     async function loadWeather() {
@@ -307,6 +323,34 @@
       await loadRoadLayer('mid', 22, 5, 10);
       await loadRoadLayer('high', 23, 9, 24);
     });
+
+    function enterFullscreen() {
+  const elem = document.getElementById('map');
+  if (elem.requestFullscreen) {
+    elem.requestFullscreen();
+  } else if (elem.webkitRequestFullscreen) {
+    elem.webkitRequestFullscreen();
+  } else if (elem.msRequestFullscreen) {
+    elem.msRequestFullscreen();
+  }
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) {
+    document.exitFullscreen();
+  } else if (document.webkitExitFullscreen) {
+    document.webkitExitFullscreen();
+  } else if (document.msExitFullscreen) {
+    document.msExitFullscreen();
+  }
+}
+
+// Show/hide fullscreen exit button
+document.addEventListener('fullscreenchange', () => {
+  const isFS = document.fullscreenElement !== null;
+  document.getElementById('exit-fullscreen-btn').style.display = isFS ? 'block' : 'none';
+});
+
   </script>
 </body>
 </html>
