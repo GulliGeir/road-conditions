@@ -7,10 +7,7 @@
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     #map { width: 100%; height: 100%; }
-    .maplibregl-popup-content {
-      font-family: sans-serif;
-      padding: 10px;
-    }
+    .maplibregl-popup-content { font-family: sans-serif; padding: 10px; }
   </style>
 </head>
 <body>
@@ -24,7 +21,7 @@
       container: 'map',
       style: 'https://api.maptiler.com/maps/streets/style.json?key=a3sOp8tuMrNynToqbxXE',
       center: [-19.02, 64.96],
-      zoom: 5.5
+      zoom: 6
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -83,7 +80,6 @@
     }
 
     function getNearestStation(lng, lat) {
-      if (!weatherStations.length) return null;
       let minDist = Infinity, nearest = null;
       for (let st of weatherStations) {
         const dx = lng - st.lon;
@@ -94,17 +90,18 @@
           nearest = st;
         }
       }
-      return nearest;
+      return (minDist < 0.25) ? nearest : null; // Allow wider tolerance
     }
 
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
-      const sourceId = `road-${id}`;
-      map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      const srcId = `road-${id}`;
+
+      map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       map.addLayer({
         id: `${id}-line`,
         type: 'line',
-        source: sourceId,
+        source: srcId,
         minzoom,
         ...(maxzoom ? { maxzoom } : {}),
         paint: {
@@ -117,27 +114,26 @@
         }
       });
 
-      map.on('click', `${id}-line`, (e) => {
+      map.addLayer({
+        id: `${id}-click`,
+        type: 'line',
+        source: srcId,
+        layout: {},
+        paint: {
+          'line-color': 'rgba(0,0,0,0)',
+          'line-width': 10
+        }
+      });
+
+      map.on('click', `${id}-click`, (e) => {
         const f = e.features[0];
         const p = f.properties;
         const label = statusLabels[p.ASTAND_YFIRBORD] || p.ASTAND_YFIRBORD;
 
-        const coords = f.geometry.coordinates;
-        let midLng = 0, midLat = 0, count = 0;
-        coords.forEach(pair => {
-          if (Array.isArray(pair[0])) {
-            pair.forEach(p => { midLng += p[0]; midLat += p[1]; count++; });
-          } else {
-            midLng += pair[0];
-            midLat += pair[1];
-            count++;
-          }
-        });
-        midLng /= count;
-        midLat /= count;
-
-        const nearest = getNearestStation(midLng, midLat);
-        const tempText = nearest ? `${nearest.temp}°C at ${nearest.name}` : 'No weather station nearby';
+        const coords = f.geometry.coordinates.flat();
+        const mid = coords[Math.floor(coords.length / 2)];
+        const nearest = getNearestStation(mid[0], mid[1]);
+        const tempText = nearest ? `${nearest.temp}°C at ${nearest.name}` : 'No nearby station';
 
         new maplibregl.Popup({ offset: 10 })
           .setLngLat(e.lngLat)
@@ -149,25 +145,28 @@
           .addTo(map);
       });
 
-      // Fetch and inject road GeoJSON from ArcGIS
-      const urlBase = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
-      const url = `${urlBase}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+      map.on('mouseenter', `${id}-click`, () => map.getCanvas().style.cursor = 'pointer');
+      map.on('mouseleave', `${id}-click`, () => map.getCanvas().style.cursor = '');
+
+      // Fetch and inject road data
+      const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
+      const query = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
 
       const all = [];
       let offset = 0, more = true;
       while (more) {
-        const res = await fetch(`${url}&resultOffset=${offset}`);
+        const res = await fetch(`${query}&resultOffset=${offset}`);
         const json = await res.json();
         all.push(...json.features);
         more = json.exceededTransferLimit;
         offset += json.features.length;
       }
 
-      map.getSource(sourceId).setData({ type: 'FeatureCollection', features: all });
+      map.getSource(srcId).setData({ type: 'FeatureCollection', features: all });
     }
 
     map.on('load', async () => {
-      await loadWeather(); // load first so popups work immediately
+      await loadWeather();
       await loadRoadLayer('low', 21, 0, 6);
       await loadRoadLayer('mid', 22, 5, 10);
       await loadRoadLayer('high', 23, 9, 24);
