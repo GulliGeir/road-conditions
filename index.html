@@ -2,12 +2,15 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Iceland Road Map</title>
+  <title>Iceland Road Map with Temperatures</title>
   <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     #map { width: 100%; height: 100%; }
-    .maplibregl-popup-content { font-family: sans-serif; padding: 10px; }
+    .maplibregl-popup-content {
+      font-family: sans-serif;
+      padding: 10px;
+    }
   </style>
 </head>
 <body>
@@ -16,7 +19,6 @@
   <script>
     const proxy = 'https://road-conditions.vercel.app/api/proxy?url=';
     const weatherURL = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
-    const cameraURL  = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1');
 
     const map = new maplibregl.Map({
       container: 'map',
@@ -61,148 +63,114 @@
       'EKKI_I_THJONUSTU': 'No Service'
     };
 
-    map.on('load', () => {
-      //
-      // ROAD CONDITIONS (ArcGIS)
-      //
-      const arcgisLayers = [
-        { id: 'low',  layerId: 21, minzoom: 0,  maxzoom: 6 },
-        { id: 'mid',  layerId: 22, minzoom: 5,  maxzoom: 10 },
-        { id: 'high', layerId: 23, minzoom: 9 }
-      ];
+    let weatherStations = [];
 
-      arcgisLayers.forEach(({ id, layerId, minzoom, maxzoom }) => {
-        const sourceId = `road-${id}`;
-        map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-
-        map.addLayer({
-          id: `${id}-line`,
-          type: 'line',
-          source: sourceId,
-          minzoom,
-          ...(maxzoom ? { maxzoom } : {}),
-          paint: {
-            'line-color': [
-              'match', ['get', 'ASTAND_YFIRBORD'],
-              ...Object.entries(statusColors).flat(),
-              '#000000'
-            ],
-            'line-width': 2
-          }
-        });
-
-        map.on('click', `${id}-line`, (e) => {
-          const p = e.features[0].properties;
-          const label = statusLabels[p.ASTAND_YFIRBORD] || p.ASTAND_YFIRBORD;
-          new maplibregl.Popup({ offset: 10 })
-            .setLngLat(e.lngLat)
-            .setHTML(`<strong>Road ${p.NRVEGUR}</strong><br>Status: ${label}`)
-            .addTo(map);
-        });
-
-        async function fetchRoads(layerId) {
-          const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${layerId}`;
-          const url = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
-          let all = [], offset = 0, more = true;
-          while (more) {
-            const res = await fetch(`${url}&resultOffset=${offset}`);
-            const json = await res.json();
-            all.push(...json.features);
-            more = json.exceededTransferLimit;
-            offset += json.features.length;
-          }
-          return { type: 'FeatureCollection', features: all };
-        }
-
-        fetchRoads(layerId).then(data => {
-          map.getSource(sourceId).setData(data);
-        });
-      });
-
-      //
-      // WEATHER STATIONS
-      //
-      map.addSource('wx', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
-      map.addLayer({
-        id: 'weather',
-        type: 'symbol',
-        source: 'wx',
-        minzoom: 5,
-        layout: {
-          'text-field': ['concat', ['get', 'temp'], '°C'],
-          'text-size': 14,
-          'text-offset': [0, 0.6],
-          'text-allow-overlap': true
-        }
-      });
-
-      async function loadWeather() {
+    async function loadWeather() {
+      try {
         const xml = await fetch(weatherURL).then(r => r.text());
         const doc = new DOMParser().parseFromString(xml, 'application/xml');
         const items = [...doc.getElementsByTagName('item')];
 
-        const features = items.map(i => ({
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [
-              parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
-              parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
-            ]
-          },
-          properties: {
-            name: i.getElementsByTagName('Nafn')[0].textContent,
-            temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—'
-          }
+        weatherStations = items.map(i => ({
+          name: i.getElementsByTagName('Nafn')[0].textContent,
+          temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—',
+          lon: parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
+          lat: parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
         }));
-
-        map.getSource('wx').setData({ type: 'FeatureCollection', features });
+      } catch (err) {
+        console.error('Weather load error:', err);
       }
+    }
 
-      //
-      // CAMERAS
-      //
-      map.addSource('cams', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    function getNearestStation(lng, lat) {
+      if (!weatherStations.length) return null;
+      let minDist = Infinity, nearest = null;
+      for (let st of weatherStations) {
+        const dx = lng - st.lon;
+        const dy = lat - st.lat;
+        const dist = dx * dx + dy * dy;
+        if (dist < minDist) {
+          minDist = dist;
+          nearest = st;
+        }
+      }
+      return nearest;
+    }
+
+    async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
+      const sourceId = `road-${id}`;
+      map.addSource(sourceId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+
       map.addLayer({
-        id: 'cams',
-        type: 'symbol',
-        source: 'cams',
-        minzoom: 6,
-        layout: {
-          'text-field': '📷',
-          'text-size': 20,
-          'text-allow-overlap': true
+        id: `${id}-line`,
+        type: 'line',
+        source: sourceId,
+        minzoom,
+        ...(maxzoom ? { maxzoom } : {}),
+        paint: {
+          'line-color': [
+            'match', ['get', 'ASTAND_YFIRBORD'],
+            ...Object.entries(statusColors).flat(),
+            '#000000'
+          ],
+          'line-width': 2
         }
       });
 
-      async function loadCameras() {
-        const xml = await fetch(cameraURL).then(r => r.text());
-        const doc = new DOMParser().parseFromString(xml, 'application/xml');
-        const items = [...doc.getElementsByTagName('item')];
+      map.on('click', `${id}-line`, (e) => {
+        const f = e.features[0];
+        const p = f.properties;
+        const label = statusLabels[p.ASTAND_YFIRBORD] || p.ASTAND_YFIRBORD;
 
-        const features = items.map(i => ({
-          type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [
-              parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
-              parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
-            ]
-          },
-          properties: {
-            Maelist_nr: i.getElementsByTagName('Maelist_nr')[0]?.textContent,
-            Skyring: i.getElementsByTagName('Skyring')[0]?.textContent,
-            Slod: i.getElementsByTagName('Slod')[0]?.textContent
+        const coords = f.geometry.coordinates;
+        let midLng = 0, midLat = 0, count = 0;
+        coords.forEach(pair => {
+          if (Array.isArray(pair[0])) {
+            pair.forEach(p => { midLng += p[0]; midLat += p[1]; count++; });
+          } else {
+            midLng += pair[0];
+            midLat += pair[1];
+            count++;
           }
-        }));
+        });
+        midLng /= count;
+        midLat /= count;
 
-        map.getSource('cams').setData({ type: 'FeatureCollection', features });
+        const nearest = getNearestStation(midLng, midLat);
+        const tempText = nearest ? `${nearest.temp}°C at ${nearest.name}` : 'No weather station nearby';
+
+        new maplibregl.Popup({ offset: 10 })
+          .setLngLat(e.lngLat)
+          .setHTML(`
+            <strong>Road ${p.NRVEGUR}</strong><br>
+            Condition: ${label}<br>
+            Temperature: ${tempText}
+          `)
+          .addTo(map);
+      });
+
+      // Fetch and inject road GeoJSON from ArcGIS
+      const urlBase = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
+      const url = `${urlBase}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+
+      const all = [];
+      let offset = 0, more = true;
+      while (more) {
+        const res = await fetch(`${url}&resultOffset=${offset}`);
+        const json = await res.json();
+        all.push(...json.features);
+        more = json.exceededTransferLimit;
+        offset += json.features.length;
       }
 
-      loadWeather();
-      loadCameras();
-      setInterval(loadWeather, 60000);
-      setInterval(loadCameras, 60000);
+      map.getSource(sourceId).setData({ type: 'FeatureCollection', features: all });
+    }
+
+    map.on('load', async () => {
+      await loadWeather(); // load first so popups work immediately
+      await loadRoadLayer('low', 21, 0, 6);
+      await loadRoadLayer('mid', 22, 5, 10);
+      await loadRoadLayer('high', 23, 9, 24);
     });
   </script>
 </body>
