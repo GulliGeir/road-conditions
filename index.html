@@ -13,7 +13,7 @@
       box-shadow: none !important;
       border-radius: 0 !important;
     }
-    .toggle-box {
+    .controls {
       position: absolute;
       top: 10px;
       left: 10px;
@@ -25,12 +25,32 @@
       font-size: 14px;
       box-shadow: 0 1px 5px rgba(0,0,0,0.2);
     }
-    .toggle-box input { margin-right: 6px; }
+    .controls label, .controls button {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+    }
+    .controls button {
+      background: #eee;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }
+    .controls button:hover {
+      background: #ddd;
+    }
   </style>
 </head>
 <body>
-  <div class="toggle-box">
+  <div class="controls">
     <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
+    <div><strong>Regions</strong></div>
+    <button onclick="zoomToRegion('north')">North</button>
+    <button onclick="zoomToRegion('south')">South</button>
+    <button onclick="zoomToRegion('east')">East</button>
+    <button onclick="zoomToRegion('west')">West</button>
+    <button onclick="zoomToRegion('highlands')">Highlands</button>
   </div>
   <div id="map"></div>
 
@@ -43,10 +63,25 @@
       container: 'map',
       style: 'https://api.maptiler.com/maps/streets/style.json?key=a3sOp8tuMrNynToqbxXE',
       center: [-19.02, 64.96],
-      zoom: 6
+      zoom: 6,
+      maxBounds: [[-25, 62.5], [-12, 67.5]],
+      minZoom: 5
     });
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    const regionBounds = {
+      north: [[-21.5, 65.5], [-16, 66.5]],
+      south: [[-22, 63.5], [-17, 64.2]],
+      east:  [[-17.5, 64.2], [-13, 66.5]],
+      west:  [[-24.5, 63.8], [-20.5, 65.2]],
+      highlands: [[-20.5, 64.5], [-17, 65.5]]
+    };
+
+    function zoomToRegion(region) {
+      const bounds = regionBounds[region];
+      map.fitBounds(bounds, { padding: 40 });
+    }
 
     const statusColors = {
       'GREIDFAERT': '#00DF30',
@@ -102,18 +137,47 @@
     let weatherStations = [];
 
     async function loadWeather() {
-      try {
-        const response = await fetch(weatherURL);
-        const json = await response.json();
-        weatherStations = json.map(i => ({
-          name: i.Nafn || 'Unknown',
-          temp: i.Hiti ?? '—',
-          lon: parseFloat(i.Lengd),
-          lat: parseFloat(i.Breidd)
-        })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
-      } catch (err) {
-        console.error('Weather load error:', err);
-      }
+      const res = await fetch(weatherURL);
+      const json = await res.json();
+      weatherStations = json.map(i => ({
+        name: i.Nafn || 'Unknown',
+        temp: i.Hiti ?? '—',
+        lon: parseFloat(i.Lengd),
+        lat: parseFloat(i.Breidd)
+      })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
+
+      map.addSource('weather-stations', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: weatherStations.map(st => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
+            properties: { name: st.name, temp: st.temp }
+          }))
+        }
+      });
+
+      map.addLayer({
+        id: 'weather-labels',
+        type: 'circle',
+        source: 'weather-stations',
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': 6
+        },
+        layout: { visibility: 'none' }
+      });
+
+      map.on('click', (e) => {
+        const features = map.queryRenderedFeatures(e.point, { layers: ['weather-labels'] });
+        if (!features.length) return;
+        const { temp, name } = features[0].properties;
+        new maplibregl.Popup()
+          .setLngLat(features[0].geometry.coordinates)
+          .setHTML(`<strong>${name}</strong><br>🌡️ ${temp} °C`)
+          .addTo(map);
+      });
     }
 
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
@@ -160,7 +224,6 @@
         const conditionColor = statusColors[rawStatus] || '#9C9C9C';
         const highlightColor = darkerColors[rawStatus] || '#333';
 
-        // Remove previous highlight
         if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
         if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
 
@@ -168,6 +231,7 @@
           type: 'geojson',
           data: feature
         });
+
         map.addLayer({
           id: 'highlighted-road',
           type: 'line',
@@ -200,39 +264,6 @@
 
     map.on('load', async () => {
       await loadWeather();
-
-      map.on('click', (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['weather-labels'] });
-        if (!features.length) return;
-        const { temp, name } = features[0].properties;
-        new maplibregl.Popup()
-          .setLngLat(features[0].geometry.coordinates)
-          .setHTML(`<strong>${name}</strong><br>🌡️ ${temp} °C`)
-          .addTo(map);
-      });
-
-      map.addSource('weather-stations', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: weatherStations.map(st => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
-            properties: { name: st.name, temp: st.temp }
-          }))
-        }
-      });
-
-      map.addLayer({
-        id: 'weather-labels',
-        type: 'circle',
-        source: 'weather-stations',
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': 6
-        },
-        layout: { visibility: 'none' }
-      });
 
       document.getElementById('weather-toggle').addEventListener('change', (e) => {
         map.setLayoutProperty('weather-labels', 'visibility', e.target.checked ? 'visible' : 'none');
