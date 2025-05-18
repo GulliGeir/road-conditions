@@ -65,18 +65,15 @@
     async function loadWeather() {
   try {
     const response = await fetch(weatherURL);
-    const text = await response.text();
+    const json = await response.json(); // it's JSON, not XML
 
-    console.log("🔁 Raw weather response:\n", text.slice(0, 500)); // print first 500 characters
+    console.log("✅ Weather JSON:", json);
 
-    const doc = new DOMParser().parseFromString(text, 'application/xml');
-    const items = [...doc.getElementsByTagName('item')];
-
-    weatherStations = items.map(i => ({
-      name: i.getElementsByTagName('Nafn')[0]?.textContent || 'Unknown',
-      temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—',
-      lon: parseFloat(i.getElementsByTagName('Lengd')[0]?.textContent),
-      lat: parseFloat(i.getElementsByTagName('Breidd')[0]?.textContent)
+    weatherStations = json.map(i => ({
+      name: i.Nafn || 'Unknown',
+      temp: i.Hiti ?? '—',
+      lon: parseFloat(i.Lengd),
+      lat: parseFloat(i.Breidd)
     })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
 
     console.log('✅ Weather stations parsed:', weatherStations.length);
@@ -84,6 +81,7 @@
     console.error('❌ Weather load error:', err);
   }
 }
+
 
 
     function getNearestStation(lng, lat) {
