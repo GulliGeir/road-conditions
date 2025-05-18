@@ -143,7 +143,7 @@ function getNearestStation(lng, lat) {
         const mid = coords[Math.floor(coords.length / 2)];
         const nearest = getNearestStation(mid[0], mid[1]);
         const tempText = nearest
-          ? Temperature: ${nearest.temp}°C at ${nearest.name} (${Math.sqrt(minDist).toFixed(2)}°)
+          ? `${nearest.temp}°C at ${nearest.name}`
           : 'Weather station not found';
 
         new maplibregl.Popup({ offset: 10 })
@@ -151,7 +151,7 @@ function getNearestStation(lng, lat) {
           .setHTML(`
             <strong>Road ${p.NRVEGUR}</strong><br>
             Condition: ${label}<br>
-            Temperature: ${tempText}
+            Temperature: ${nearest.temp}°C at ${nearest.name} (${Math.sqrt(minDist).toFixed(2)}°)
           `)
           .addTo(map);
       });
