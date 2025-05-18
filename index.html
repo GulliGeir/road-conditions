@@ -2,15 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Iceland Road Map with Live Weather</title>
+  <title>Iceland Road Map with Weather Toggle</title>
   <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
     html, body { margin: 0; padding: 0; height: 100%; }
     #map { width: 100%; height: 100%; }
     .maplibregl-popup-content { font-family: sans-serif; padding: 10px; }
+    .toggle-box {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(255,255,255,0.95);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-family: sans-serif;
+      font-size: 14px;
+      box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+    }
+    .toggle-box input {
+      margin-right: 6px;
+    }
   </style>
 </head>
 <body>
+  <div class="toggle-box">
+    <label><input type="checkbox" id="weather-toggle" checked /> Show Weather</label>
+  </div>
+
   <div id="map"></div>
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
@@ -140,7 +159,17 @@
         }
       });
 
-      // Add road layers
+      // TOGGLE: Hide/show weather labels on checkbox
+      const toggle = document.getElementById('weather-toggle');
+      toggle.addEventListener('change', () => {
+        map.setLayoutProperty(
+          'weather-labels',
+          'visibility',
+          toggle.checked ? 'visible' : 'none'
+        );
+      });
+
+      // Load roads
       await loadRoadLayer('low', 21, 0, 6);
       await loadRoadLayer('mid', 22, 5, 10);
       await loadRoadLayer('high', 23, 9, 24);
