@@ -15,79 +15,32 @@
       border-radius: 0 !important;
     }
 
- .controls {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 10;
-  background: rgba(255,255,255,0.95);
-  border-radius: 10px;
-  padding: 12px 14px;
-  font-family: sans-serif;
-  font-size: 14px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  max-width: 180px;
-}
-. label {
-  font-weight: 500;
-  font-size: 14px;
-}
-
-
-    /* New grid-style region buttons */
-    .region-grid {
+    .controls {
       position: absolute;
-      bottom: 20px;
-      right: 20px;
-      display: grid;
-      grid-template-columns: repeat(2, 70px);
-      grid-template-rows: repeat(2, 40px);
-      gap: 6px;
+      top: 10px;
+      left: 10px;
       z-index: 10;
-    }
-
-    .region-grid button,
-    .highlands-button {
-      background: rgba(255,255,255,0.9);
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      padding: 6px;
-      font-size: 13px;
+      background: rgba(255,255,255,0.95);
+      border-radius: 10px;
+      padding: 12px 14px;
       font-family: sans-serif;
-      cursor: pointer;
-      text-align: center;
-      font-weight: 600;
+      font-size: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      max-width: 180px;
     }
 
-    .region-grid button:hover,
-    .highlands-button:hover {
-      background: #f0f0f0;
-    }
-
-    .highlands-button {
-      position: absolute;
-      bottom: 20px;
-      right: 160px;
-      height: 40px;
-      width: 120px;
+    .controls label {
+      font-weight: 500;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
   <div id="map">
     <div class="controls">
-  <div style="font-weight:600; font-size:15px; margin-bottom:8px;">Map Options</div>
-  <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
-</div>
-
-
-    <div class="region-grid">
-      <button onclick="zoomToRegion('north')">North</button>
-      <button onclick="zoomToRegion('east')">East</button>
-      <button onclick="zoomToRegion('west')">West</button>
-      <button onclick="zoomToRegion('south')">South</button>
+      <div style="font-weight:600; font-size:15px; margin-bottom:8px;">Map Options</div>
+      <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
     </div>
-    <button class="highlands-button" onclick="zoomToRegion('highlands')">Highlands</button>
   </div>
 
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
@@ -106,17 +59,9 @@
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-    const regionBounds = {
-      north: [[-21.5, 65.5], [-16, 66.5]],
-      south: [[-22, 63.5], [-17, 64.2]],
-      east:  [[-17.5, 64.2], [-13, 66.5]],
-      west:  [[-24.5, 63.8], [-20.5, 65.2]],
-      highlands: [[-20.5, 64.5], [-17, 65.5]]
-    };
-
-    function zoomToRegion(region) {
-      const bounds = regionBounds[region];
-      map.fitBounds(bounds, { padding: 40 });
+    function removeHighlight() {
+      if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
+      if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
     }
 
     const statusColors = {
@@ -170,55 +115,12 @@
       'EKKI_I_THJONUSTU': 'Out of service'
     };
 
-    let weatherStations = [];
-
-    async function loadWeather() {
-      const res = await fetch(weatherURL);
-      const json = await res.json();
-      weatherStations = json.map(i => ({
-        name: i.Nafn || 'Unknown',
-        temp: i.Hiti ?? '—',
-        lon: parseFloat(i.Lengd),
-        lat: parseFloat(i.Breidd)
-      })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
-
-      map.addSource('weather-stations', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: weatherStations.map(st => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
-            properties: { name: st.name, temp: st.temp }
-          }))
-        }
-      });
-
-      map.addLayer({
-        id: 'weather-labels',
-        type: 'circle',
-        source: 'weather-stations',
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': 6
-        },
-        layout: { visibility: 'none' }
-      });
-
-      map.on('click', (e) => {
-        const features = map.queryRenderedFeatures(e.point, { layers: ['weather-labels'] });
-        if (!features.length) return;
-        const { temp, name } = features[0].properties;
-        new maplibregl.Popup()
-          .setLngLat(features[0].geometry.coordinates)
-          .setHTML(`<strong>${name}</strong><br>🌡️ ${temp} °C`)
-          .addTo(map);
-      });
-    }
-
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
       const srcId = `road-${id}`;
       const layerId = `${id}-line`;
+      const clickId = `${layerId}-click`;
+      const hoverId = `${layerId}-hover`;
+
       map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       map.addLayer({
@@ -237,6 +139,56 @@
         }
       });
 
+      map.addLayer({
+        id: clickId,
+        type: 'line',
+        source: srcId,
+        minzoom,
+        ...(maxzoom ? { maxzoom } : {}),
+        paint: {
+          'line-color': '#000000',
+          'line-opacity': 0,
+          'line-width': 10
+        }
+      });
+
+      map.addLayer({
+        id: hoverId,
+        type: 'line',
+        source: srcId,
+        minzoom,
+        ...(maxzoom ? { maxzoom } : {}),
+        paint: {
+          'line-color': '#3388ff',
+          'line-width': 6,
+          'line-opacity': [
+            'case',
+            ['boolean', ['feature-state', 'hover'], false],
+            1,
+            0
+          ]
+        }
+      });
+
+      let hoveredId = null;
+
+      map.on('mousemove', clickId, (e) => {
+        map.getCanvas().style.cursor = 'pointer';
+        if (hoveredId !== null) {
+          map.setFeatureState({ source: srcId, id: hoveredId }, { hover: false });
+        }
+        hoveredId = e.features[0].id;
+        map.setFeatureState({ source: srcId, id: hoveredId }, { hover: true });
+      });
+
+      map.on('mouseleave', clickId, () => {
+        map.getCanvas().style.cursor = '';
+        if (hoveredId !== null) {
+          map.setFeatureState({ source: srcId, id: hoveredId }, { hover: false });
+        }
+        hoveredId = null;
+      });
+
       const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
       const query = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
 
@@ -250,9 +202,10 @@
         offset += json.features.length;
       }
 
+      all.forEach((f, i) => f.id = i);
       map.getSource(srcId).setData({ type: 'FeatureCollection', features: all });
 
-      map.on('click', layerId, (e) => {
+      map.on('click', clickId, (e) => {
         const feature = e.features[0];
         const roadNumber = feature.properties.NRVEGUR || '—';
         const rawStatus = feature.properties.ASTAND_YFIRBORD || 'OTHEKKT';
@@ -260,14 +213,8 @@
         const conditionColor = statusColors[rawStatus] || '#9C9C9C';
         const highlightColor = darkerColors[rawStatus] || '#333';
 
-        if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
-        if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
-
-        map.addSource('highlighted-road', {
-          type: 'geojson',
-          data: feature
-        });
-
+        removeHighlight();
+        map.addSource('highlighted-road', { type: 'geojson', data: feature });
         map.addLayer({
           id: 'highlighted-road',
           type: 'line',
@@ -298,11 +245,49 @@
       });
     }
 
-    function removeHighlight() {
-  if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
-  if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
-}
+    async function loadWeather() {
+      const res = await fetch(weatherURL);
+      const json = await res.json();
+      const weatherStations = json.map(i => ({
+        name: i.Nafn || 'Unknown',
+        temp: i.Hiti ?? '—',
+        lon: parseFloat(i.Lengd),
+        lat: parseFloat(i.Breidd)
+      })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
 
+      map.addSource('weather-stations', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: weatherStations.map(st => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
+            properties: { name: st.name, temp: st.temp }
+          }))
+        }
+      });
+
+      map.addLayer({
+        id: 'weather-labels',
+        type: 'circle',
+        source: 'weather-stations',
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': 6
+        },
+        layout: { visibility: 'none' }
+      });
+
+      map.on('click', (e) => {
+        const weatherHits = map.queryRenderedFeatures(e.point, { layers: ['weather-labels'] });
+        if (!weatherHits.length) return;
+        const { temp, name } = weatherHits[0].properties;
+        new maplibregl.Popup()
+          .setLngLat(weatherHits[0].geometry.coordinates)
+          .setHTML(`<strong>${name}</strong><br>🌡️ ${temp} °C`)
+          .addTo(map);
+      });
+    }
 
     map.on('load', async () => {
       await loadWeather();
@@ -314,6 +299,16 @@
       await loadRoadLayer('low', 21, 0, 6);
       await loadRoadLayer('mid', 22, 5, 10);
       await loadRoadLayer('high', 23, 9, 24);
+    });
+
+    map.on('click', (e) => {
+      const features = map.queryRenderedFeatures(e.point, {
+        layers: ['low-line-click', 'mid-line-click', 'high-line-click', 'weather-labels']
+      });
+      if (!features.length) {
+        removeHighlight();
+        document.querySelectorAll('.maplibregl-popup').forEach(p => p.remove());
+      }
     });
   </script>
 </body>
