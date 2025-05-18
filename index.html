@@ -84,25 +84,25 @@
 
 
 
-    function getNearestStation(lng, lat) {
-      if (!weatherStations.length) return null;
+function getNearestStation(lng, lat) {
+  if (!weatherStations.length) return null;
 
-      let minDist = Infinity;
-      let nearest = null;
+  let nearest = null;
+  let minDist = Infinity;
 
-      for (let st of weatherStations) {
-        const dx = lng - st.lon;
-        const dy = lat - st.lat;
-        const dist = dx * dx + dy * dy; // distance in degrees squared
-        if (dist < minDist) {
-          minDist = dist;
-          nearest = st;
-        }
-      }
+  for (const st of weatherStations) {
+    const dx = lng - st.lon;
+    const dy = lat - st.lat;
+    const dist = dx * dx + dy * dy;
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = st;
+    }
+  }
 
-      if (nearest) {
-        console.log(`📍 Nearest station to (${lng}, ${lat}) → ${nearest.name}, ${nearest.temp}°C`);
-      }
+  return nearest; // always return the closest one
+}
+
 
       return nearest;
     }
