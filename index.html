@@ -118,16 +118,52 @@
       map.getSource(srcId).setData({ type: 'FeatureCollection', features: all });
 
       // Add popup interaction
-      map.on('click', layerId, (e) => {
-        const feature = e.features[0];
-        const road = feature.properties.NRVEGUR || 'Unknown road';
-        const condition = feature.properties.ASTAND_YFIRBORD || 'Unknown';
+      const statusText = {
+  'GREIDFAERT': 'Easily passable',
+  'HALKA': 'Slippery',
+  'HALKUBLETTIR': 'Some slippery spots',
+  'LOKAD': 'Closed',
+  'OFAERT_VEDUR': 'Impassable due to weather',
+  'OFAERT_ANNAD': 'Impassable',
+  'SNJOTHEKJA': 'Snow covered',
+  'THAEFINGUR': 'Drift snow',
+  'FAERT_FJALLABILUM': 'Only passable by 4x4',
+  'THUNGFAERT': 'Heavy traffic',
+  'KRAP': 'Slush',
+  'OTHEKKT': 'Unknown',
+  'FLUGHALT': 'Extremely slippery',
+  'EKKI_I_THJONUSTU': 'Out of service'
+};
 
-        new maplibregl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`<strong>Road:</strong> ${road}<br><strong>Condition:</strong> ${condition}`)
-          .addTo(map);
-      });
+map.on('click', layerId, (e) => {
+  const feature = e.features[0];
+  const road = feature.properties.NRVEGUR || 'Unknown';
+  const rawStatus = feature.properties.ASTAND_YFIRBORD || 'OTHEKKT';
+  const conditionText = statusText[rawStatus] || 'Unknown';
+  const conditionColor = statusColors[rawStatus] || '#9C9C9C';
+
+  const popupHTML = `
+    <div style="font-family: sans-serif; border-radius: 8px; overflow: hidden; width: 260px;">
+      <div style="background: #000; color: #fff; padding: 10px 12px; font-weight: bold; font-size: 16px;">
+        <span style="background:#fff; color:#000; border-radius: 6px; padding:2px 8px; margin-right: 6px;">${road}</span>
+        ${rawStatus.replace(/_/g, ' ')}
+      </div>
+      <div style="background: #fff; padding: 14px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center;">
+          <span style="width: 36px; height: 12px; background: ${conditionColor}; border-radius: 8px; margin-right: 10px;"></span>
+          <span style="font-size: 16px; font-weight: 600;">${conditionText}</span>
+        </div>
+        <div style="font-size: 18px;">›</div>
+      </div>
+    </div>
+  `;
+
+  new maplibregl.Popup()
+    .setLngLat(e.lngLat)
+    .setHTML(popupHTML)
+    .addTo(map);
+});
+
 
       // Change cursor on hover
       map.on('mouseenter', layerId, () => {
