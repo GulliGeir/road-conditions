@@ -74,28 +74,38 @@
           lon: parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
           lat: parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
         }));
+
+        console.log('✅ Weather stations loaded:', weatherStations.length);
       } catch (err) {
-        console.error('Weather load error:', err);
+        console.error('❌ Weather load error:', err);
       }
     }
 
     function getNearestStation(lng, lat) {
-      let minDist = Infinity, nearest = null;
+      if (!weatherStations.length) return null;
+
+      let minDist = Infinity;
+      let nearest = null;
+
       for (let st of weatherStations) {
         const dx = lng - st.lon;
         const dy = lat - st.lat;
-        const dist = dx * dx + dy * dy;
+        const dist = dx * dx + dy * dy; // distance in degrees squared
         if (dist < minDist) {
           minDist = dist;
           nearest = st;
         }
       }
-      return (minDist < 0.25) ? nearest : null; // Allow wider tolerance
+
+      if (nearest) {
+        console.log(`📍 Nearest station to (${lng}, ${lat}) → ${nearest.name}, ${nearest.temp}°C`);
+      }
+
+      return nearest;
     }
 
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
       const srcId = `road-${id}`;
-
       map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       map.addLayer({
@@ -133,7 +143,9 @@
         const coords = f.geometry.coordinates.flat();
         const mid = coords[Math.floor(coords.length / 2)];
         const nearest = getNearestStation(mid[0], mid[1]);
-        const tempText = nearest ? `${nearest.temp}°C at ${nearest.name}` : 'No nearby station';
+        const tempText = nearest
+          ? `${nearest.temp}°C at ${nearest.name}`
+          : 'Weather station not found';
 
         new maplibregl.Popup({ offset: 10 })
           .setLngLat(e.lngLat)
@@ -148,7 +160,6 @@
       map.on('mouseenter', `${id}-click`, () => map.getCanvas().style.cursor = 'pointer');
       map.on('mouseleave', `${id}-click`, () => map.getCanvas().style.cursor = '');
 
-      // Fetch and inject road data
       const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
       const query = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
 
