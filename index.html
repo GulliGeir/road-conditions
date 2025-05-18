@@ -76,19 +76,27 @@
             source: `rc-${id}`,
             minzoom, ...(maxzoom!==undefined?{maxzoom}:{}),
             paint: {
-              'line-color': [
-                'match', ['get','ASTAND_YFIRBORD'],
-                'GREIDFAERT','#00DF30','HALKA','#00B7FF','HALKUBLETTIR','#FCA433',
-                'LOKAD','#FF0000','OFAERT_VEDUR','#FF0000','FAERT_FJALLABILUM','#03DF30',
-                'SNJOTHEKJA','#FFFFFF','KRAP','#9C9C9C','FLUGHALT','#0000FF',
-                'OTHEKKT','#9C9C9C','THAEFINGUR','#FD7EFC','THUNGFAERT','#3F3F3F',
-                '#000000'
-              ],
-              'line-width': [
-                'match', ['get','ASTAND_YFIRBORD'],
-                'GREIDFAERT', 2, 1
-              ]
-            }
+  'line-color': [
+    'match', ['get','ASTAND_YFIRBORD'],
+    'EKKI_I_THJONUSTU','#9C9C9C',
+    'FAERT_FJALLABILUM','#03DF30',
+    'SNJOTHEKJA','#FFFFFF',
+    'HALKA','#00B7FF',
+    'LOKAD','#FF0000',
+    'HALKUBLETTIR','#FCA433',
+    'KRAP','#9C9C9C',
+    'OFAERT_ANNAD','#FF0000',
+    'OFAERT_VEDUR','#FF0000',
+    'OTHEKKT','#9C9C9C',
+    'FLUGHALT','#0000FF',
+    'GREIDFAERT','#00DF30',
+    'THAEFINGUR','#FD7EFC',
+    'THUNGFAERT','#3F3F3F',
+    '#FF00FF' // fallback: magenta = unrecognized
+  ],
+  'line-width': 2
+}
+
           });
           map.addLayer({
             id: `rc-${id}-hit`,
