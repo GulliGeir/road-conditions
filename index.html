@@ -28,7 +28,7 @@
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
   max-width: 180px;
 }
-.controls label {
+. label {
   font-weight: 500;
   font-size: 14px;
 }
@@ -76,8 +76,10 @@
 <body>
   <div id="map">
     <div class="controls">
-      <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
-    </div>
+  <div style="font-weight:600; font-size:15px; margin-bottom:8px;">Map Options</div>
+  <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
+</div>
+
 
     <div class="region-grid">
       <button onclick="zoomToRegion('north')">North</button>
