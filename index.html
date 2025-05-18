@@ -20,17 +20,15 @@
       font-size: 14px;
       box-shadow: 0 1px 5px rgba(0,0,0,0.2);
     }
-    .toggle-box input {
-      margin-right: 6px;
-    }
+    .toggle-box input { margin-right: 6px; }
   </style>
 </head>
 <body>
   <div class="toggle-box">
     <label><input type="checkbox" id="weather-toggle" checked /> Show Weather</label>
   </div>
-
   <div id="map"></div>
+
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
     const proxy = 'https://road-conditions.vercel.app/api/proxy?url=';
@@ -84,10 +82,12 @@
 
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
       const srcId = `road-${id}`;
+      const layerId = `${id}-line`;
+
       map.addSource(srcId, { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
 
       map.addLayer({
-        id: `${id}-line`,
+        id: layerId,
         type: 'line',
         source: srcId,
         minzoom,
@@ -116,6 +116,26 @@
       }
 
       map.getSource(srcId).setData({ type: 'FeatureCollection', features: all });
+
+      // Add popup interaction
+      map.on('click', layerId, (e) => {
+        const feature = e.features[0];
+        const road = feature.properties.NRVEGUR || 'Unknown road';
+        const condition = feature.properties.ASTAND_YFIRBORD || 'Unknown';
+
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`<strong>Road:</strong> ${road}<br><strong>Condition:</strong> ${condition}`)
+          .addTo(map);
+      });
+
+      // Change cursor on hover
+      map.on('mouseenter', layerId, () => {
+        map.getCanvas().style.cursor = 'pointer';
+      });
+      map.on('mouseleave', layerId, () => {
+        map.getCanvas().style.cursor = '';
+      });
     }
 
     map.on('load', async () => {
@@ -159,17 +179,10 @@
         }
       });
 
-      // TOGGLE: Hide/show weather labels on checkbox
-      const toggle = document.getElementById('weather-toggle');
-      toggle.addEventListener('change', () => {
-        map.setLayoutProperty(
-          'weather-labels',
-          'visibility',
-          toggle.checked ? 'visible' : 'none'
-        );
+      document.getElementById('weather-toggle').addEventListener('change', (e) => {
+        map.setLayoutProperty('weather-labels', 'visibility', e.target.checked ? 'visible' : 'none');
       });
 
-      // Load roads
       await loadRoadLayer('low', 21, 0, 6);
       await loadRoadLayer('mid', 22, 5, 10);
       await loadRoadLayer('high', 23, 9, 24);
