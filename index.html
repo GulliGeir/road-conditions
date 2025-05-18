@@ -5,8 +5,16 @@
   <title>Iceland Road Map</title>
   <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; }
-    #map { width: 100%; height: 100%; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      position: relative;
+    }
     .maplibregl-popup-content {
       padding: 0 !important;
       background: none !important;
@@ -40,21 +48,34 @@
     .controls button:hover {
       background: #ddd;
     }
+    .fullscreen-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <div class="controls">
-    <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
-    <div><strong>Regions</strong></div>
-    <button onclick="zoomToRegion('north')">North</button>
-    <button onclick="zoomToRegion('south')">South</button>
-    <button onclick="zoomToRegion('east')">East</button>
-    <button onclick="zoomToRegion('west')">West</button>
-    <button onclick="zoomToRegion('highlands')">Highlands</button>
+  <div id="map">
+    <div class="controls">
+      <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
+      <div><strong>Regions</strong></div>
+      <button onclick="zoomToRegion('north')">North</button>
+      <button onclick="zoomToRegion('south')">South</button>
+      <button onclick="zoomToRegion('east')">East</button>
+      <button onclick="zoomToRegion('west')">West</button>
+      <button onclick="zoomToRegion('highlands')">Highlands</button>
+    </div>
+    <button class="fullscreen-btn" onclick="enterFullscreen()">Fullscreen</button>
   </div>
-
-
-  <div id="map"></div>
 
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
@@ -135,6 +156,17 @@
       'FLUGHALT': 'Extremely slippery',
       'EKKI_I_THJONUSTU': 'Out of service'
     };
+
+    function enterFullscreen() {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
+    }
 
     let weatherStations = [];
 
