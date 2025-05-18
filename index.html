@@ -2,219 +2,290 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Iceland Road Conditions Map with User Location, Cameras & Weather</title>
-  <link href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <title>Iceland Road Conditions Map</title>
+
+  <!-- MapLibre CSS -->
+  <link
+    href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
+    rel="stylesheet"
+  />
+
   <style>
-    body, html {
+    /* Make map fill the viewport */
+    html, body {
       margin: 0;
       padding: 0;
-      background: #E2D9F3;
+      height: 100%;
     }
-
-    .map-wrapper {
-      width: 75%;
-      max-width: 900px;
-      margin: 20px auto;
-    }
-
-    #iceland-map {
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
       width: 100%;
-      height: 400px;
-      border: 2px solid #ccc;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
-
+    /* Popup styling */
     .maplibregl-popup-content {
-      font-family: 'Segoe UI', Roboto, sans-serif;
-      border-radius: 8px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-      padding: 12px 16px;
-      max-width: 280px;
-      font-size: 1rem;
-      line-height: 1.4;
+      font-family: sans-serif;
+      padding: 8px 12px;
+      border-radius: 6px;
     }
-    .maplibregl-popup-tip { border-top-color: #fff; }
-    .popup-header { display: flex; align-items: center; margin-bottom: 8px; }
-    .status-icon { font-size: 1.5em; margin-right: 8px; }
-    .popup-row { margin: 6px 0; }
-    .popup-row strong { display: inline-block; width: 70px; }
   </style>
 </head>
 <body>
-  <div class="map-wrapper">
-    <div id="iceland-map"></div>
-  </div>
+  <div id="map"></div>
 
+  <!-- MapLibre JS -->
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
-    // optional CORS proxy
-    const CORS = url =>
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    document.addEventListener('DOMContentLoaded', () => {
+      // 1. Initialize map with MapTiler style (includes glyphs & sprites)
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://api.maptiler.com/maps/streets/style.json?key=a3sOp8tuMrNynToqbxXE',
+        center: [-19.02, 64.96],
+        zoom: 5.3
+      });
 
-    const map = new maplibregl.Map({
-      container: 'iceland-map',
-      style: {
-        version: 8,
-        sources: {
-          maptiler: {
-            type: 'vector',
-            url: 'https://api.maptiler.com/tiles/v3/tiles.json?key=a3sOp8tuMrNynToqbxXE'
-          }
-        },
-        layers: [
-          { id: 'background', type: 'background', paint: { 'background-color': '#ffffff' } },
-          { id: 'water', type: 'fill', source: 'maptiler', 'source-layer': 'water', paint: { 'fill-color': '#aee6f9' } },
-          {
-            id: 'major-roads',
-            type: 'line',
-            source: 'maptiler',
-            'source-layer': 'transportation',
-            filter: ['all', ['!=','class','ferry'], ['in','class','motorway','trunk','primary']],
-            paint: {
-              'line-color': '#FFFFFF',
-              'line-width': ['interpolate',['linear'],['zoom'],0,1.5,5,3,10,6,14,12]
-            }
-          }
-        ]
-      },
-      center: [-19.02, 64.96],
-      zoom: 5.8
-    });
-
-    map.on('load', () => {
-      map.addControl(new maplibregl.NavigationControl());
+      // Controls
+      map.addControl(new maplibregl.NavigationControl(), 'top-right');
       map.addControl(new maplibregl.GeolocateControl({
         positionOptions: { enableHighAccuracy: true },
-        trackUserLocation: true,
-        showUserHeading: true
-      }), 'top-left');
-      map.setMaxBounds([[-30, 62], [-10, 67]]);
+        trackUserLocation: true
+      }), 'top-right');
 
-      // Country label
-      map.addSource('country-label', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [{
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [-19.02, 64.96] },
-            properties: { name: 'Iceland' }
-          }]
+      map.on('load', () => {
+        //
+        // 2. ROAD CONDITIONS
+        //
+        const levels = [
+          { id: 'low',  layerId: 21, minzoom: 0,  maxzoom: 6  },
+          { id: 'mid',  layerId: 22, minzoom: 5,  maxzoom: 11 },
+          { id: 'high', layerId: 23, minzoom: 10             }
+        ];
+        const statusInfo = {
+          'EKKI_I_THJONUSTU':    { icon:'⛔',  label:'No Service' },
+          'FAERT_FJALLABILUM':   { icon:'🚙',  label:'4×4 Only' },
+          'SNJOTHEKJA':          { icon:'❄️', label:'Snow' },
+          'HALKA':               { icon:'🧊',  label:'Slippery' },
+          'HALKUBLETTIR':        { icon:'⚠️', label:'Icy Patches' },
+          'GREIDFAERT':          { icon:'🛣️', label:'Passable' },
+          'LOKAD':               { icon:'⛔️', label:'Closed' },
+          'OFAERT_VEDUR':        { icon:'🌧️', label:'Weather Closure' },
+          'OFAERT_ANNAD':        { icon:'🚫', label:'Other Closure' },
+          'KRAP':                { icon:'🧊',  label:'Slush' },
+          'FLUGHALT':            { icon:'✈️', label:'Airport Halted' },
+          'OTHEKKT':             { icon:'❓', label:'Unknown' },
+          'THAEFINGUR':          { icon:'🌫️', label:'Fog' },
+          'THUNGFAERT':          { icon:'🐌', label:'Heavy Traffic' }
+        };
+
+        // Add sources & layers
+        levels.forEach(({id, layerId, minzoom, maxzoom}) => {
+          map.addSource(`rc-src-${id}`, {
+            type: 'geojson',
+            data: { type:'FeatureCollection', features: [] }
+          });
+          // colored line
+          map.addLayer({
+            id: `rc-${id}-line`,
+            type: 'line',
+            source: `rc-src-${id}`,
+            minzoom,
+            ...maxzoom!==undefined?{maxzoom}:{},
+            paint: {
+              'line-color': [
+                'match', ['get','ASTAND_YFIRBORD'],
+                'EKKI_I_THJONUSTU','#9C9C9C',
+                'FAERT_FJALLABILUM','#03DF30',
+                'SNJOTHEKJA','#FFFFFF',
+                'HALKA','#00B7FF',
+                'LOKAD','#FF0000',
+                'HALKUBLETTIR','#FCA433',
+                'KRAP','#9C9C9C',
+                'OFAERT_ANNAD','#FF0000',
+                'OFAERT_VEDUR','#FF0000',
+                'OTHEKKT','#9C9C9C',
+                'FLUGHALT','#0000FF',
+                'GREIDFAERT','#00DF30',
+                'THAEFINGUR','#FD7EFC',
+                'THUNGFAERT','#3F3F3F',
+                '#000000'
+              ],
+              'line-width': [
+                'match', ['get','ASTAND_YFIRBORD'],
+                'EKKI_I_THJONUSTU', 1,
+                2
+              ]
+            }
+          });
+          // invisible hit-line
+          map.addLayer({
+            id: `rc-${id}-hit`,
+            type: 'line',
+            source: `rc-src-${id}`,
+            paint: {
+              'line-width': 20,
+              'line-color': 'rgba(0,0,0,0)'
+            }
+          });
+          // popups
+          map.on('mouseenter', `rc-${id}-hit`, () => map.getCanvas().style.cursor = 'pointer');
+          map.on('mouseleave', `rc-${id}-hit`, () => map.getCanvas().style.cursor = '');
+          map.on('click', `rc-${id}-hit`, e => {
+            const p = e.features[0].properties;
+            const info = statusInfo[p.ASTAND_YFIRBORD] || { icon:'ℹ️', label:p.ASTAND_YFIRBORD };
+            new maplibregl.Popup({ offset: 10 })
+              .setLngLat(e.lngLat)
+              .setHTML(
+                `<strong>Road ${p.NRVEGUR}</strong><br>` +
+                `${info.icon} ${info.label}`
+              )
+              .addTo(map);
+          });
+        });
+
+        // ArcGIS paging helper
+        async function fetchAllFeatures(layerId) {
+          const base = 
+            `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/` +
+            `${layerId}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+          let all = [], offset = 0, more = true;
+          while (more) {
+            const res = await fetch(`${base}&resultOffset=${offset}`);
+            const json = await res.json();
+            all.push(...json.features);
+            more = json.exceededTransferLimit;
+            offset += json.features.length;
+          }
+          return { type:'FeatureCollection', features: all };
         }
-      });
-      map.addLayer({
-        id: 'country-label-layer',
-        type: 'symbol',
-        source: 'country-label',
-        layout: {
-          'text-field': ['get','name'],
-          'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
-          'text-size': 48,
-          'text-anchor': 'center'
-        },
-        paint:{
-          'text-color':'#333333',
-          'text-halo-color':'#ffffff',
-          'text-halo-width':2
-        },
-        minzoom:0,
-        maxzoom:6
-      });
+        // load & refresh every 60s
+        async function refreshRC() {
+          for (let lvl of levels) {
+            const fc = await fetchAllFeatures(lvl.layerId);
+            map.getSource(`rc-src-${lvl.id}`).setData(fc);
+          }
+        }
+        refreshRC();
+        setInterval(refreshRC, 60_000);
 
-      // Road conditions
-      const levels = [
-        { id:'low',  layer:21, minzoom:0,  maxzoom:6  },
-        { id:'mid',  layer:22, minzoom:5,  maxzoom:11 },
-        { id:'high', layer:23, minzoom:10 }
-      ];
-      levels.forEach(({id,layer,minzoom,maxzoom})=>{
-        map.addSource(`rc-src-${id}`,{type:'geojson',data:{type:'FeatureCollection',features:[]}});
+
+        //
+        // 3. CAMERAS
+        //
+        map.addSource('cams', {
+          type: 'geojson',
+          data: { type:'FeatureCollection', features: [] }
+        });
         map.addLayer({
-          id:`rc-${id}-lines`,
-          type:'line',
-          source:`rc-src-${id}`,
-          minzoom, ...(maxzoom!==undefined?{maxzoom}:{})
-          ,paint:{
-            'line-color':[
-              'match',['get','ASTAND_YFIRBORD'],
-              'EKKI_I_THJONUSTU','#9C9C9C','FAERT_FJALLABILUM','#03DF30',
-              'SNJOTHEKJA','#FFFFFF','HALKA','#00B7FF','LOKAD','#FF0000',
-              'HALKUBLETTIR','#FCA433','KRAP','#9C9C9C','OFAERT_ANNAD','#FF0000',
-              'OFAERT_VEDUR','#FF0000','OTHEKKT','#9C9C9C','FLUGHALT','#0000FF',
-              'GREIDFAERT','#00DF30','THAEFINGUR','#FD7EFC','THUNGFAERT','#3F3F3F',
-              '#000000'
-            ],
-            'line-width':['match',['get','ASTAND_YFIRBORD'],'EKKI_I_THJONUSTU',1,2]
+          id: 'cams',
+          type: 'symbol',
+          source: 'cams',
+          minzoom: 8,
+          layout: {
+            'text-field': '📷',
+            'text-size': 20,
+            'text-allow-overlap': true
           }
         });
-        map.addLayer({
-          id:`rc-${id}-clicklines`,
-          type:'line',
-          source:`rc-src-${id}`,
-          paint:{'line-color':'rgba(0,0,0,0)','line-width':20}
+        map.on('click','cams', e => {
+          const p = e.features[0].properties;
+          new maplibregl.Popup({ offset:10 })
+            .setLngLat(e.lngLat)
+            .setHTML(
+              `<strong>Cam #${p.Maelist_nr}</strong><br>` +
+              `${p.Skyring || ''}<br>` +
+              `<a href="${p.Slod}" target="_blank">View image</a>`
+            )
+            .addTo(map);
         });
-      });
-      const fetchAll = async layerId=>{
-        const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${layerId}/query?where=1=1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
-        let all=[],offset=0,more=true;
-        while(more){
-          const res=await fetch(base+`&resultOffset=${offset}`), json=await res.json();
-          all.push(...json.features);
-          more=json.exceededTransferLimit;
-          offset+=json.features.length;
+        async function loadCameras(){
+          try {
+            const txt = await fetch('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1')
+                          .then(r => r.text());
+            const xml = new DOMParser().parseFromString(txt,'application/xml');
+            const items = Array.from(xml.getElementsByTagName('item'));
+            const feats = items.map(i => ({
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: [
+                  parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
+                  parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+                ]
+              },
+              properties: {
+                Maelist_nr: i.getElementsByTagName('Maelist_nr')[0]?.textContent,
+                Skyring:    i.getElementsByTagName('Skyring')[0]?.textContent,
+                Slod:       i.getElementsByTagName('Slod')[0]?.textContent
+              }
+            }));
+            map.getSource('cams').setData({ type:'FeatureCollection', features: feats });
+          } catch(err) {
+            console.error('Camera load error', err);
+          }
         }
-        return {type:'FeatureCollection',features:all};
-      };
-      const refresh=()=>levels.forEach(({id,layer})=>fetchAll(layer).then(fc=>map.getSource(`rc-src-${id}`).setData(fc)));
-      refresh();
-      setInterval(refresh,60000);
+        loadCameras();
+        setInterval(loadCameras, 60_000);
 
-      // Cameras
-      map.addSource('cameras',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-      map.loadImage('https://cdn.jsdelivr.net/npm/ionicons@5.5.2/dist/svg/camera-outline.svg',(err,img)=>{
-        if(err) return console.error(err);
-        map.addImage('camera-icon',img);
-        map.addLayer({
-          id:'camera-points',
-          type:'symbol',
-          source:'cameras',
-          minzoom:8,
-          layout:{'icon-image':'camera-icon','icon-size':0.5,'icon-allow-overlap':true}
+
+        //
+        // 4. WEATHER
+        //
+        map.addSource('wx', {
+          type: 'geojson',
+          data: { type:'FeatureCollection', features: [] }
         });
-      });
-      fetch(CORS('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1'))
-        .then(r=>r.json()).then(data=>{
-          const cams = Array.isArray(data)?data:data.features||[];
-          const features = cams.map(cam=>{
-            const lon=parseFloat(cam.Longitude??cam.Lon??cam.LONG),
-                  lat=parseFloat(cam.Latitude ??cam.Lat ??cam.LAT);
-            return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},properties:cam};
-          });
-          map.getSource('cameras').setData({type:'FeatureCollection',features});
-        }).catch(e=>console.error('Camera fetch error:',e));
+        map.addLayer({
+          id: 'wx',
+          type: 'symbol',
+          source: 'wx',
+          minzoom: 6,
+          layout: {
+            'text-field': ['concat',['get','temp'],'°C'],
+            'text-font': ['Open Sans Bold','Arial Unicode MS Bold'],
+            'text-size': 14,
+            'text-offset': [0, 0.6],
+            'text-allow-overlap': true
+          }
+        });
+        map.on('click','wx', e => {
+          const p = e.features[0].properties;
+          new maplibregl.Popup({ offset:10 })
+            .setLngLat(e.lngLat)
+            .setHTML(`<strong>${p.name}</strong><br/>Temp: ${p.temp}°C`)
+            .addTo(map);
+        });
+        async function loadWeather(){
+          try {
+            const txt = await fetch('https://gagnaveita.vegagerdin.is/api/vedur2014_1')
+                          .then(r => r.text());
+            const xml = new DOMParser().parseFromString(txt,'application/xml');
+            const items = Array.from(xml.getElementsByTagName('item'));
+            const feats = items.map(i => ({
+              type: 'Feature',
+              geometry: {
+                type: 'Point',
+                coordinates: [
+                  parseFloat(i.getElementsByTagName('Lengd')[0].textContent),
+                  parseFloat(i.getElementsByTagName('Breidd')[0].textContent)
+                ]
+              },
+              properties: {
+                name: i.getElementsByTagName('Nafn')[0].textContent,
+                temp: i.getElementsByTagName('Hiti')[0]?.textContent || '—'
+              }
+            }));
+            map.getSource('wx').setData({ type:'FeatureCollection', features: feats });
+          } catch(err) {
+            console.error('Weather load error', err);
+          }
+        }
+        loadWeather();
+        setInterval(loadWeather, 60_000);
 
-      // Weather stations: only appear at zoom ≥ 10
-      map.addSource('weather',{type:'geojson',data:{type:'FeatureCollection',features:[]}});
-      map.addLayer({
-        id:'weather-points',
-        type:'symbol',
-        source:'weather',
-        minzoom:10,              // <— show only when zoomed in to 10+
-        layout:{'text-field':'🌡️','text-size':24,'text-allow-overlap':true}
-      });
-      fetch(CORS('https://xmlweather.vedur.is/?op_w=xml&view=stations&format=json'))
-        .then(r=>r.json()).then(data=>{
-          const sts = data.stations||data.results||[];
-          const features = sts.map(st=>{
-            const lon=parseFloat(st.lon??st.Lon),
-                  lat=parseFloat(st.lat??st.Lat),
-                  id = st.id??st.ID;
-            return {type:'Feature',geometry:{type:'Point',coordinates:[lon,lat]},properties:{...st,id}};
-          });
-          map.getSource('weather').setData({type:'FeatureCollection',features});
-        }).catch(e=>console.error('Station fetch error:',e));
-    });
+      }); // end map.load
+    }); // end DOMContentLoaded
   </script>
 </body>
 </html>
