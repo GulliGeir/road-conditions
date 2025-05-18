@@ -163,7 +163,7 @@
         });
         async function loadCameras(){
           try {
-            const proxy = 'https://api.allorigins.win/raw?url=';
+            const proxy = 'https://thingproxy.freeboard.io/fetch/';
             const url   = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vefmyndavelar2014_1');
             const txt   = await fetch(url).then(r=>r.text());
             const xml   = new DOMParser().parseFromString(txt,'application/xml');
@@ -214,7 +214,7 @@
         });
         async function loadWeather(){
           try {
-            const proxy = 'https://api.allorigins.win/raw?url=';
+            const proxy = 'https://thingproxy.freeboard.io/fetch/';
             const url   = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
             const txt   = await fetch(url).then(r=>r.text());
             const xml   = new DOMParser().parseFromString(txt,'application/xml');
