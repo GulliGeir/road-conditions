@@ -24,7 +24,9 @@
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
     // — your zoom‐break threshold —
-    const CLUSTER_BREAK_Z = 10;
+    const CLUSTER_SHOW_Z  = 6;   // clusters only start at zoom 6
+    const CLUSTER_BREAK_Z = 10;  // split into stations at zoom 10
+
 
     // — roads proxy + weather endpoint —
     const proxy      = 'https://road-conditions.vercel.app/api/proxy?url=';
@@ -233,55 +235,56 @@
       });
 
       // — 2) cluster circles, visible zoom 0–9 —
-      map.addLayer({
-        id: 'weather-clusters',
-        type: 'circle',
-        source: 'weather-stations',
-        filter: ['has','point_count'],
-        minzoom: 0,
-        maxzoom: CLUSTER_BREAK_Z - 1,
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': [
-            'step',
-            ['get','point_count'],
-            10,   10, 15,
-            30,  20,
-            50,  25
-          ]
-        }
-      });
+      // — clusters: only from zoom 6 up to 9 —
+map.addLayer({
+  id: 'weather-clusters',
+  type: 'circle',
+  source: 'weather-stations',
+  filter: ['has','point_count'],
+  minzoom: CLUSTER_SHOW_Z,
+  maxzoom: CLUSTER_BREAK_Z - 1,
+  paint: {
+    'circle-color': '#3C8DFF',
+    'circle-radius': [
+      'step',
+      ['get','point_count'],
+      10,   10, 15,
+      30,  20,
+      50,  25
+    ]
+  }
+});
 
-      // — 3) cluster-count labels, zoom 0–9 —
-      map.addLayer({
-        id: 'weather-cluster-count',
-        type: 'symbol',
-        source: 'weather-stations',
-        filter: ['has','point_count'],
-        minzoom: 0,
-        maxzoom: CLUSTER_BREAK_Z - 1,
-        layout: {
-          'text-field': '{point_count_abbreviated}',
-          'text-font': ['Arial Unicode MS Bold'],
-          'text-size': 12
-        },
-        paint: { 'text-color': '#fff' }
-      });
+map.addLayer({
+  id: 'weather-cluster-count',
+  type: 'symbol',
+  source: 'weather-stations',
+  filter: ['has','point_count'],
+  minzoom: CLUSTER_SHOW_Z,
+  maxzoom: CLUSTER_BREAK_Z - 1,
+  layout: {
+    'text-field': '{point_count_abbreviated}',
+    'text-font': ['Arial Unicode MS Bold'],
+    'text-size': 12
+  },
+  paint: { 'text-color': '#fff' }
+});
 
-      // — 4) unclustered points, only zoom 10+ —
-      map.addLayer({
-        id: 'weather-unclustered-point',
-        type: 'circle',
-        source: 'weather-stations',
-        filter: ['!', ['has','point_count']],
-        minzoom: CLUSTER_BREAK_Z,
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': 6,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#fff'
-        }
-      });
+// — individual stations: only at zoom 10+ —
+map.addLayer({
+  id: 'weather-unclustered-point',
+  type: 'circle',
+  source: 'weather-stations',
+  filter: ['!', ['has','point_count']],
+  minzoom: CLUSTER_BREAK_Z,
+  paint: {
+    'circle-color': '#3C8DFF',
+    'circle-radius': 6,
+    'circle-stroke-width': 1,
+    'circle-stroke-color': '#fff'
+  }
+});
+
     }
 
     // — popup HTML builder —
