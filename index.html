@@ -3,96 +3,94 @@
 <head>
   <meta charset="utf-8" />
   <title>Iceland Road & Weather Map</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link
     href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
     rel="stylesheet"
   />
   <style>
     html, body { margin:0; padding:0; height:100%; }
-    #map { width:100%; height:100%; position:relative; }
-
+    #map { position:relative; width:100%; height:100%; }
     .controls {
       position: absolute;
       top: 10px;
       left: 10px;
-      z-index: 10;
+      z-index: 999;
       background: rgba(255,255,255,0.95);
-      border-radius: 10px;
-      padding: 12px 14px;
+      padding: 8px 12px;
+      border-radius: 6px;
       font-family: sans-serif;
-      font-size: 14px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
     }
-    .controls label { font-weight:500; font-size:14px; }
-
+    .controls label { font-size: 14px; }
     .maplibregl-popup-content {
-      padding: 0 !important;
-      background: none !important;
-      box-shadow: none !important;
-      border-radius: 0 !important;
+      padding:0 !important;
+      background:none !important;
+      box-shadow:none !important;
+      border-radius:0 !important;
     }
   </style>
 </head>
 <body>
-  <div id="map">
-    <div class="controls">
-      <div style="font-weight:600; font-size:15px; margin-bottom:8px;">Map Options</div>
-      <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
-    </div>
+
+  <!-- checkbox control -->
+  <div class="controls">
+    <label><input type="checkbox" id="weather-toggle" /> Show Weather</label>
   </div>
+
+  <!-- map container -->
+  <div id="map"></div>
 
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibregl.js"></script>
   <script>
-    // — CONFIG —
-    const CLUSTER_BREAK_Z = 10;  // zoom <10 → cluster popups; ≥10 → station popups
-    const proxy      = 'https://road-conditions.vercel.app/api/proxy?url=';
+    // ─── CONFIG ──────────────────────────────────────────────────────────────
+    const CLUSTER_BREAK_Z = 10;  // <10 clusters, ≥10 individual
+    const proxy = 'https://road-conditions.vercel.app/api/proxy?url=';
     const weatherURL = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
 
-    // — INIT MAP —
+    // ─── INITIALIZE MAP ──────────────────────────────────────────────────────
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://api.maptiler.com/maps/0196e78d-8743-7dbf-90f5-cbede6455991/style.json?key=pbPr4x1AY4Yr8ic8iItZ',
       center: [-19.02, 64.96],
       zoom: 5,
       minZoom: 5,
-      maxBounds: [[-25, 62.5], [-12, 67.5]]
+      maxBounds: [[-25,62.5],[-12,67.5]]
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-    // — ROAD HIGHLIGHT HELPERS & STYLES —
+    // ─── ROAD HIGHLIGHT HELPERS & STYLES ────────────────────────────────────
     function removeHighlight() {
       if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
       if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
     }
     const statusColors = {
-      'GREIDFAERT':'#00DF30','HALKA':'#00B7FF','HALKUBLETTIR':'#FCA433',
-      'LOKAD':'#FF0000','OFAERT_VEDUR':'#FF0000','OFAERT_ANNAD':'#FF0000',
-      'SNJOTHEKJA':'#FFFFFF','THAEFINGUR':'#FD7EFC','FAERT_FJALLABILUM':'#03DF30',
-      'THUNGFAERT':'#3F3F3F','KRAP':'#9C9C9C','OTHEKKT':'#9C9C9C',
-      'FLUGHALT':'#0000FF','EKKI_I_THJONUSTU':'#9C9C9C'
+      GREIDFAERT:'#00DF30', HALKA:'#00B7FF', HALKUBLETTIR:'#FCA433',
+      LOKAD:'#FF0000', OFAERT_VEDUR:'#FF0000', OFAERT_ANNAD:'#FF0000',
+      SNJOTHEKJA:'#FFFFFF', THAEFINGUR:'#FD7EFC', FAERT_FJALLABILUM:'#03DF30',
+      THUNGFAERT:'#3F3F3F', KRAP:'#9C9C9C', OTHEKKT:'#9C9C9C',
+      FLUGHALT:'#0000FF', EKKI_I_THJONUSTU:'#9C9C9C'
     };
     const darkerColors = {
-      'GREIDFAERT':'#008b1a','HALKA':'#005b99','HALKUBLETTIR':'#c17300',
-      'LOKAD':'#800000','OFAERT_VEDUR':'#800000','OFAERT_ANNAD':'#800000',
-      'SNJOTHEKJA':'#cccccc','THAEFINGUR':'#d150d1','FAERT_FJALLABILUM':'#027f17',
-      'THUNGFAERT':'#1f1f1f','KRAP':'#6a6a6a','OTHEKKT':'#6a6a6a',
-      'FLUGHALT':'#000099','EKKI_I_THJONUSTU':'#6a6a6a'
+      GREIDFAERT:'#008b1a', HALKA:'#005b99', HALKUBLETTIR:'#c17300',
+      LOKAD:'#800000', OFAERT_VEDUR:'#800000', OFAERT_ANNAD:'#800000',
+      SNJOTHEKJA:'#cccccc', THAEFINGUR:'#d150d1', FAERT_FJALLABILUM:'#027f17',
+      THUNGFAERT:'#1f1f1f', KRAP:'#6a6a6a', OTHEKKT:'#6a6a6a',
+      FLUGHALT:'#000099', EKKI_I_THJONUSTU:'#6a6a6a'
     };
     const statusText = {
-      'GREIDFAERT':'Easily passable','HALKA':'Slippery','HALKUBLETTIR':'Some slippery spots',
-      'LOKAD':'Closed','OFAERT_VEDUR':'Impassable due to weather','OFAERT_ANNAD':'Impassable',
-      'SNJOTHEKJA':'Snow covered','THAEFINGUR':'Drift snow','FAERT_FJALLABILUM':'Only 4×4',
-      'THUNGFAERT':'Heavy traffic','KRAP':'Slush','OTHEKKT':'Unknown',
-      'FLUGHALT':'Extremely slippery','EKKI_I_THJONUSTU':'Out of service'
+      GREIDFAERT:'Easily passable', HALKA:'Slippery',
+      HALKUBLETTIR:'Some slippery spots', LOKAD:'Closed',
+      OFAERT_VEDUR:'Impassable due to weather', OFAERT_ANNAD:'Impassable',
+      SNJOTHEKJA:'Snow covered', THAEFINGUR:'Drift snow',
+      FAERT_FJALLABILUM:'Only passable by 4×4', THUNGFAERT:'Heavy traffic',
+      KRAP:'Slush', OTHEKKT:'Unknown', FLUGHALT:'Extremely slippery',
+      EKKI_I_THJONUSTU:'Out of service'
     };
 
-    // — ROAD LAYER LOADER (unchanged) —
+    // ─── LOAD ROAD LAYER ─────────────────────────────────────────────────────
     async function loadRoadLayer(id, arcgisId, minz, maxz) {
-      const src = `road-${id}`,
-            line = `${id}-line`,
-            click = `${line}-click`,
-            hover = `${line}-hover`;
-
+      const src = `road-${id}`, line = `${id}-line`, clk = `${line}-click`, hov = `${line}-hover`;
       map.addSource(src, { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
       map.addLayer({
         id: line, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
@@ -102,11 +100,11 @@
         }
       });
       map.addLayer({
-        id: click, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
+        id: clk, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
         paint:{ 'line-color':'#000','line-opacity':0,'line-width':10 }
       });
       map.addLayer({
-        id: hover, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
+        id: hov, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
         paint:{
           'line-color':'#3388ff','line-width':6,
           'line-opacity':['case',['boolean',['feature-state','hover'],false],1,0]
@@ -114,23 +112,23 @@
       });
 
       let hovered = null;
-      map.on('mousemove', click, e => {
+      map.on('mousemove', clk, e => {
         map.getCanvas().style.cursor='pointer';
-        if (hovered!==null) map.setFeatureState({ source:src, id:hovered },{ hover:false });
+        if (hovered!==null) map.setFeatureState({source:src,id:hovered},{hover:false});
         hovered = e.features[0].id;
-        map.setFeatureState({ source:src, id:hovered },{ hover:true });
+        map.setFeatureState({source:src,id:hovered},{hover:true});
       });
-      map.on('mouseleave', click, () => {
+      map.on('mouseleave', clk, () => {
         map.getCanvas().style.cursor='';
-        if (hovered!==null) map.setFeatureState({ source:src, id:hovered },{ hover:false });
+        if (hovered!==null) map.setFeatureState({source:src,id:hovered},{hover:false});
         hovered = null;
       });
 
-      // fetch all via paging
+      // fetch all segments, paginated
       const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
-      const q    = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
+      const q = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
       let all = [], offset=0, more=true;
-      while(more){
+      while(more) {
         const r = await fetch(`${q}&resultOffset=${offset}`);
         const j = await r.json();
         all = all.concat(j.features);
@@ -140,29 +138,28 @@
       all.forEach((f,i)=>f.id=i);
       map.getSource(src).setData({ type:'FeatureCollection', features:all });
 
-      // click → popup
-      map.on('click', click, e => {
+      // click → styled popup
+      map.on('click', clk, e => {
         const P = e.features[0].properties;
         removeHighlight();
-        map.addSource('highlighted-road',{ type:'geojson', data:e.features[0] });
+        map.addSource('highlighted-road',{type:'geojson',data:e.features[0]});
         map.addLayer({
           id:'highlighted-road', type:'line', source:'highlighted-road',
-          paint:{ 'line-color':darkerColors[P.ASTAND_YFIRBORD],'line-width':6 }
+          paint:{ 'line-color':darkerColors[P.ASTAND_YFIRBORD], 'line-width':6 }
         });
 
         const html = `
           <div style="font-family:sans-serif;">
             <div style="
               background:#000;color:#fff;font-weight:bold;font-size:15px;
-              padding:8px 10px; display:flex; justify-content:space-between;
+              padding:8px 10px;display:flex;justify-content:space-between;
               border-radius:8px 8px 0 0;
             ">
               <div>
                 <span style="
                   background:#fff;color:#000;border-radius:5px;
-                  padding:1px 8px;margin-right:8px;
-                  font-size:13px;font-weight:bold;
-                ">${P.NRVEGUR||'—'}</span>${P.ASTAND_YFIRBORD}
+                  padding:1px 8px;margin-right:8px;font-size:13px;font-weight:bold;
+                ">${P.NRVEGUR||'–'}</span>${P.ASTAND_YFIRBORD}
               </div>
               <button onclick="this.closest('.maplibregl-popup').remove();removeHighlight();"
                 style="background:none;border:none;color:white;font-size:16px;cursor:pointer;">
@@ -170,7 +167,7 @@
               </button>
             </div>
             <div style="
-              background:#fff;padding:12px; display:flex; align-items:center;
+              background:#fff;padding:12px;display:flex;align-items:center;
               border-radius:0 0 8px 8px;
             ">
               <span style="
@@ -182,143 +179,108 @@
               </span>
             </div>
           </div>`;
-        new maplibregl.Popup({ closeButton:false })
-          .setLngLat(e.lngLat)
-          .setHTML(html)
-          .addTo(map);
+        new maplibregl.Popup({closeButton:false})
+          .setLngLat(e.lngLat).setHTML(html).addTo(map);
       });
     }
 
-    // — WEATHER LOADER & CLUSTER LAYERS —
+    // ─── LOAD & CLUSTER WEATHER ──────────────────────────────────────────────
     async function loadWeather() {
       const res = await fetch(weatherURL);
       const data = await res.json();
       const stations = data
-        .map(i => ({
-          name: i.Nafn || 'Unknown',
-          temp: i.Hiti,
-          lon: +i.Lengd,
-          lat: +i.Breidd
-        }))
-        .filter(s => !isNaN(s.lon) && !isNaN(s.lat));
+        .map(i => ({ name:i.Nafn||'Unknown', temp:i.Hiti, lon:+i.Lengd, lat:+i.Breidd }))
+        .filter(s => !isNaN(s.lon)&&!isNaN(s.lat));
 
       map.addSource('weather-stations', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: stations.map(s => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-            properties: { name: s.name, temp: s.temp }
+        type:'geojson',
+        data:{ type:'FeatureCollection',
+          features:stations.map(s=>({
+            type:'Feature',
+            geometry:{type:'Point',coordinates:[s.lon,s.lat]},
+            properties:{name:s.name,temp:s.temp}
           }))
         },
-        cluster: true,
-        clusterMaxZoom: CLUSTER_BREAK_Z - 1,
-        clusterRadius: 60
+        cluster:true,
+        clusterMaxZoom:CLUSTER_BREAK_Z-1,
+        clusterRadius:50
       });
 
-      // clusters 0–9, hidden by default
+      // Cluster circles (0–9)
       map.addLayer({
-        id: 'weather-clusters', type: 'circle', source: 'weather-stations',
-        filter: ['has', 'point_count'],
-        minzoom: 0, maxzoom: CLUSTER_BREAK_Z - 1,
-        layout: { visibility: 'none' },
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': [
-            'step',
-            ['get','point_count'],
-            10,   10, 15,
-            30,   20,
-            50,   25
-          ]
+        id:'weather-clusters', type:'circle', source:'weather-stations',
+        filter:['has','point_count'], minzoom:0, maxzoom:CLUSTER_BREAK_Z-1,
+        layout:{visibility:'none'},
+        paint:{
+          'circle-color':'#3C8DFF',
+          'circle-radius':['step',['get','point_count'],10, 10,15, 30,20, 50,25]
         }
       });
 
-      // cluster counts 0–9, hidden by default
+      // Cluster counts (0–9)
       map.addLayer({
-        id: 'weather-cluster-count', type: 'symbol', source: 'weather-stations',
-        filter: ['has','point_count'],
-        minzoom: 0, maxzoom: CLUSTER_BREAK_Z - 1,
-        layout: {
-          visibility: 'none',
-          'text-field': '{point_count_abbreviated}',
-          'text-font': ['Arial Unicode MS Bold'],
-          'text-size': 12
-        },
-        paint: { 'text-color': '#fff' }
+        id:'weather-cluster-count', type:'symbol', source:'weather-stations',
+        filter:['has','point_count'], minzoom:0, maxzoom:CLUSTER_BREAK_Z-1,
+        layout:{visibility:'none','text-field':'{point_count_abbreviated}','text-font':['Arial Unicode MS Bold'],'text-size':12},
+        paint:{'text-color':'#fff'}
       });
 
-      // un-clustered dots 10+, hidden by default
+      // Single points (10+)
       map.addLayer({
-        id: 'weather-unclustered-point', type: 'circle', source: 'weather-stations',
-        filter: ['!',['has','point_count']],
-        minzoom: CLUSTER_BREAK_Z,
-        layout: { visibility: 'none' },
-        paint: {
-          'circle-color': '#3C8DFF',
-          'circle-radius': 6,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#fff'
-        }
+        id:'weather-unclustered-point', type:'circle', source:'weather-stations',
+        filter:['!',['has','point_count']], minzoom:CLUSTER_BREAK_Z,
+        layout:{visibility:'none'},
+        paint:{'circle-color':'#3C8DFF','circle-radius':6,'circle-stroke-width':1,'circle-stroke-color':'#fff'}
       });
     }
 
-    // — POPUP GENERATORS & MANAGEMENT —
-    function makeWeatherHTML(name,temp) {
+    // ─── POPUP LOGIC ──────────────────────────────────────────────────────────
+    function makeWeatherHTML(name,temp){
       return `
         <div style="
-          font-family:sans-serif;
-          background:#fff;
-          padding:8px 12px;
-          border-radius:8px;
-          box-shadow:0 2px 6px rgba(0,0,0,0.1);
+          font-family:sans-serif;background:#fff;
+          padding:6px 10px;border-radius:6px;
+          box-shadow:0 1px 4px rgba(0,0,0,0.1);
         ">
-          <div style="font-weight:600;margin-bottom:4px;">${name}</div>
+          <div style="font-weight:600;margin-bottom:2px;">${name}</div>
           <div style="display:flex;align-items:center;">
-            <span style="font-size:18px;font-weight:bold;">${temp} °C</span>
-            <span style="margin-left:auto;font-size:16px;">→</span>
+            <span style="font-size:16px;font-weight:bold;">${temp}°C</span>
+            <span style="margin-left:auto;font-size:14px;">→</span>
           </div>
-        </div>
-      `;
+        </div>`;
     }
     const weatherPopups = [];
-    function clearWeatherPopups() {
-      weatherPopups.forEach(p => p.remove());
-      weatherPopups.length = 0;
+    function clearWeatherPopups(){
+      weatherPopups.forEach(p=>p.remove());
+      weatherPopups.length=0;
     }
 
-    map.on('zoomend', async () => {
-      // if toggle is off, do nothing
-      if (!document.getElementById('weather-toggle').checked) return;
-
+    map.on('zoomend', async ()=>{
+      if(!document.getElementById('weather-toggle').checked) return;
       clearWeatherPopups();
       const z = map.getZoom();
-
-      if (z < CLUSTER_BREAK_Z) {
-        // one popup per cluster
-        const clusters = map.querySourceFeatures('weather-stations', { filter:['has','point_count'] });
-        for (let c of clusters) {
-          const leaves = await new Promise(res =>
+      if(z < CLUSTER_BREAK_Z){
+        const clusters = map.querySourceFeatures('weather-stations',{filter:['has','point_count']});
+        for(let c of clusters){
+          const leaves = await new Promise(res=>
             map.getSource('weather-stations')
-               .getClusterLeaves(c.properties.cluster_id, 1, 0, (e,arr) => res(arr))
+               .getClusterLeaves(c.properties.cluster_id,1,0,(e,a)=>res(a))
           );
-          if (!leaves.length) continue;
-          const { name, temp } = leaves[0].properties;
+          if(!leaves.length) continue;
+          const {name,temp}=leaves[0].properties;
           weatherPopups.push(
-            new maplibregl.Popup({ closeButton:false })
+            new maplibregl.Popup({closeButton:false})
               .setLngLat(c.geometry.coordinates)
               .setHTML(makeWeatherHTML(name,temp))
               .addTo(map)
           );
         }
       } else {
-        // one popup per station
-        const pts = map.querySourceFeatures('weather-stations', { filter:['!',['has','point_count']] });
-        for (let p of pts) {
-          const { name, temp } = p.properties;
+        const pts = map.querySourceFeatures('weather-stations',{filter:['!',['has','point_count']]});
+        for(let p of pts){
+          const {name,temp}=p.properties;
           weatherPopups.push(
-            new maplibregl.Popup({ closeButton:false })
+            new maplibregl.Popup({closeButton:false})
               .setLngLat(p.geometry.coordinates)
               .setHTML(makeWeatherHTML(name,temp))
               .addTo(map)
@@ -327,36 +289,32 @@
       }
     });
 
-    // — BOOTSTRAP EVERYTHING ONCE MAP IS READY —
-    map.on('load', async () => {
+    // ─── BOOTSTRAP EVERYTHING ────────────────────────────────────────────────
+    map.on('load', async ()=>{
       await loadWeather();
-
-      // wire up toggle switch
-      document.getElementById('weather-toggle')
-        .addEventListener('change', e => {
-          const show = e.target.checked;
-          ['weather-clusters','weather-cluster-count','weather-unclustered-point']
-            .forEach(id => map.setLayoutProperty(id,'visibility', show ? 'visible' : 'none'));
-          if (!show) clearWeatherPopups();
-          else map.fire('zoomend');
-        });
-
+      // wire toggle
+      document.getElementById('weather-toggle').addEventListener('change', e=>{
+        const v = e.target.checked ? 'visible' : 'none';
+        ['weather-clusters','weather-cluster-count','weather-unclustered-point']
+          .forEach(id=>map.setLayoutProperty(id,'visibility',v));
+        clearWeatherPopups();
+        if(e.target.checked) map.fire('zoomend');
+      });
       // load roads
-      await loadRoadLayer('low', 21,  0, 6);
-      await loadRoadLayer('mid', 22,  5,10);
+      await loadRoadLayer('low',  21, 0, 6);
+      await loadRoadLayer('mid',  22, 5,10);
       await loadRoadLayer('high', 23, 9,24);
     });
 
-    // — CLEAN UP ON OUTSIDE CLICK —
-    map.on('click', e => {
-      const hit = map.queryRenderedFeatures(e.point, {
-        layers:['low-line-click','mid-line-click','high-line-click']
-      });
-      if (!hit.length) {
+    // clear on outside click
+    map.on('click', e=>{
+      const hits = map.queryRenderedFeatures(e.point, {layers:['low-line-click','mid-line-click','high-line-click']});
+      if(!hits.length){
         removeHighlight();
         clearWeatherPopups();
       }
     });
   </script>
+
 </body>
 </html>
