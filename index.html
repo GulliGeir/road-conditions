@@ -296,14 +296,21 @@
       if (!document.getElementById('weather-toggle').checked) return;
       clearWeatherPopups();
       const z = map.getZoom();
-      let popupCount = 0;
-
       if (z < CLUSTER_BREAK_Z) {
-        // when zoomed out, still cap to WEATHER_POPUP_MAX
-        const clusters = map.querySourceFeatures('weather-stations', { filter:['has','point_count'] });
+        const clusters = map.querySourceFeatures('weather-stations',{filter:['has','point_count']});
         for (let c of clusters) {
-          if (popupCount++ >= WEATHER_POPUP_MAX) break;
-          // … your existing cluster→leaf logic …
+          const leaves = await new Promise(res=>
+            map.getSource('weather-stations')
+               .getClusterLeaves(c.properties.cluster_id,1,0,(e,a)=>res(a))
+          );
+          if (!leaves.length) continue;
+          const { name, temp, wind } = leaves[0].properties;
+          weatherPopups.push(
+            new maplibregl.Popup({closeButton:false})
+              .setLngLat(c.geometry.coordinates)
+              .setHTML(makeWeatherHTML(name,temp,wind))
+              .addTo(map)
+          );
         }
       } else {
         // zoomed in: show **all** unclustered points
