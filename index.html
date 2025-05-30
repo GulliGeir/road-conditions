@@ -187,52 +187,57 @@
     clusterRadius: 60
   });
 
-  // 2) add the three layers so you can actually see the points/clusters
+  // 1) cluster circles — only up to zoom 9
   map.addLayer({
     id: 'weather-clusters',
     type: 'circle',
     source: 'weather-stations',
     filter: ['has', 'point_count'],
+    minzoom: 0,
+    maxzoom: CLUSTER_BREAK_Z - 1,    // hide at zoom ≥10
     paint: {
       'circle-color': '#3C8DFF',
       'circle-radius': [
         'step',
-        ['get', 'point_count'],
-        10,
-        10, 15,
-        30, 20,
-        50, 25
+        ['get','point_count'],
+        10,   10, 15,
+        30,  20,
+        50,  25
       ]
     }
   });
 
+  // 2) cluster count labels — only up to zoom 9
   map.addLayer({
     id: 'weather-cluster-count',
     type: 'symbol',
     source: 'weather-stations',
-    filter: ['has', 'point_count'],
+    filter: ['has','point_count'],
+    minzoom: 0,
+    maxzoom: CLUSTER_BREAK_Z - 1,    // hide at zoom ≥10
     layout: {
       'text-field': '{point_count_abbreviated}',
       'text-font': ['Arial Unicode MS Bold'],
       'text-size': 12
     },
-    paint: {
-      'text-color': '#ffffff'
-    }
+    paint: { 'text-color': '#fff' }
   });
 
+  // 3) individual stations — only from zoom 10 up
   map.addLayer({
     id: 'weather-unclustered-point',
     type: 'circle',
     source: 'weather-stations',
-    filter: ['!', ['has', 'point_count']],
+    filter: ['!', ['has','point_count']],
+    minzoom: CLUSTER_BREAK_Z,        // hide at zoom <10
     paint: {
       'circle-color': '#3C8DFF',
       'circle-radius': 6,
       'circle-stroke-width': 1,
-      'circle-stroke-color': '#ffffff'
+      'circle-stroke-color': '#fff'
     }
   });
+
 }
 
 
