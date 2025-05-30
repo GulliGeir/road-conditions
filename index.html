@@ -256,14 +256,20 @@
       })).filter(s => !isNaN(s.lon) && !isNaN(s.lat));
 
       map.addSource('weather-stations', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: weatherStations.map(st => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
-            properties: { name: st.name, temp: st.temp }
-          }))
+  type: 'geojson',
+  data: {
+    type: 'FeatureCollection',
+    features: weatherStations.map(st => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [st.lon, st.lat] },
+      properties: { name: st.name, temp: st.temp }
+    }))
+  },
+  cluster: true,
+  clusterMaxZoom: 12,    // up to zoom 12 clusters
+  clusterRadius: 60      // cluster radius in pixels
+});
+
         }
       });
 
@@ -302,34 +308,76 @@
       await loadWeather();
 
 const weatherThreshold = 8;      // zoom level to start showing popups
-const weatherPopups   = [];     // will hold our Popup instances
+const weatherPopups   = [];
+const CLUSTER_BREAK_Z = 10;  // at zoom <10 show clusters, ≥10 show each station
+
+function clearWeatherPopups() {
+  weatherPopups.forEach(p => p.remove());
+  weatherPopups.length = 0;
+}
 
 function makeWeatherHTML(name, temp) {
   return `
     <div style="
       font-family:sans-serif;
-      font-size:14px;
-      color:#000;
       background:#fff;
-      padding:12px 16px;
-      border-radius:10px;
-      box-shadow:0 2px 6px rgba(0,0,0,0.15);
+      padding:8px 12px;
+      border-radius:8px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.1);
     ">
-      <div style="font-weight:bold; font-size:16px; margin-bottom:6px;">
-        ${name}
-      </div>
+      <div style="font-weight:600; margin-bottom:4px;">${name}</div>
       <div style="display:flex; align-items:center;">
-        <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png"
-             alt="thermometer"
-             style="width:18px; height:18px; margin-right:6px;" />
-        <span style="font-size:20px; font-weight:bold;">
-          ${temp} °C
-        </span>
-        <span style="margin-left:auto; font-size:18px;">→</span>
+        <span style="font-size:18px; font-weight:bold;">${temp} °C</span>
+        <span style="margin-left:auto; font-size:16px;">→</span>
       </div>
-    </div>
-  `;
+    </div>`;
 }
+
+map.on('zoomend', async () => {
+  clearWeatherPopups();
+  const zoom = map.getZoom();
+
+  if (zoom < CLUSTER_BREAK_Z) {
+    // one popup per cluster
+    const clusters = map.querySourceFeatures('weather-stations', {
+      filter: ['has', 'point_count']
+    });
+    for (let c of clusters) {
+      const { cluster_id, point_count } = c.properties;
+      // fetch one leaf (first station) for display
+      const leaves = await new Promise(res =>
+        map.getSource('weather-stations').getClusterLeaves(
+          cluster_id, 1, 0, (err, leafArr) => res(leafArr)
+        )
+      );
+      if (leaves.length) {
+        const leaf = leaves[0];
+        const popup = new maplibregl.Popup({ closeButton: false })
+          .setLngLat(c.geometry.coordinates)
+          .setHTML(makeWeatherHTML(leaf.properties.name, leaf.properties.temp))
+          .addTo(map);
+        weatherPopups.push(popup);
+      }
+    }
+  } else {
+    // one popup per un-clustered station
+    const points = map.querySourceFeatures('weather-stations', {
+      filter: ['!', ['has', 'point_count']]
+    });
+    for (let p of points) {
+      const { name, temp } = p.properties;
+      const popup = new maplibregl.Popup({ closeButton: false })
+        .setLngLat(p.geometry.coordinates)
+        .setHTML(makeWeatherHTML(name, temp))
+        .addTo(map);
+      weatherPopups.push(popup);
+    }
+  }
+});
+
+// on map load, force the first draw
+map.once('load', () => map.fire('zoomend'));
+
 
 // on zoom end, show or hide all station popups
 map.on('zoomend', () => {
