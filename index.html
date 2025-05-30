@@ -23,7 +23,10 @@
 
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
   <script>
-    // — proxy + weather endpoint —
+    // — your zoom‐break threshold —
+    const CLUSTER_BREAK_Z = 10;
+
+    // — roads proxy + weather endpoint —
     const proxy      = 'https://road-conditions.vercel.app/api/proxy?url=';
     const weatherURL = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
 
@@ -38,12 +41,11 @@
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-    // — common helpers —
+    // — common road helpers & styles —
     function removeHighlight() {
       if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
       if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
     }
-
     const statusColors = {
       'GREIDFAERT':'#00DF30','HALKA':'#00B7FF','HALKUBLETTIR':'#FCA433',
       'LOKAD':'#FF0000','OFAERT_VEDUR':'#FF0000','OFAERT_ANNAD':'#FF0000',
@@ -68,54 +70,96 @@
       'EKKI_I_THJONUSTU':'Out of service'
     };
 
-    // — load a road layer (unchanged) —
+    // — load a road layer as before —
     async function loadRoadLayer(id, arcgisId, minzoom, maxzoom) {
-      const srcId = `road-${id}`, lineId = `${id}-line`, clickId = `${lineId}-click`, hoverId = `${lineId}-hover`;
+      const srcId = `road-${id}`,
+            lineId = `${id}-line`,
+            clickId = `${lineId}-click`,
+            hoverId = `${lineId}-hover`;
+
       map.addSource(srcId, { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
-      map.addLayer({ id:lineId, type:'line', source:srcId, minzoom, ...(maxzoom?{maxzoom}:{}),
-        paint:{ 'line-color':['match',['get','ASTAND_YFIRBORD'], ...Object.entries(statusColors).flat(), '#000'], 'line-width':4 }
+      map.addLayer({
+        id: lineId,
+        type: 'line',
+        source: srcId,
+        minzoom,
+        ...(maxzoom?{maxzoom}:{}),
+        paint: {
+          'line-color': ['match',['get','ASTAND_YFIRBORD'], ...Object.entries(statusColors).flat(), '#000'],
+          'line-width': 4
+        }
       });
-      map.addLayer({ id:clickId, type:'line', source:srcId, minzoom, ...(maxzoom?{maxzoom}:{}),
-        paint:{ 'line-color':'#000', 'line-opacity':0, 'line-width':10 }
+      map.addLayer({
+        id: clickId,
+        type: 'line',
+        source: srcId,
+        minzoom,
+        ...(maxzoom?{maxzoom}:{}),
+        paint: {
+          'line-color': '#000',
+          'line-opacity': 0,
+          'line-width': 10
+        }
       });
-      map.addLayer({ id:hoverId, type:'line', source:srcId, minzoom, ...(maxzoom?{maxzoom}:{}),
-        paint:{ 'line-color':'#3388ff','line-width':6,'line-opacity':['case',['boolean',['feature-state','hover'],false],1,0] }
+      map.addLayer({
+        id: hoverId,
+        type: 'line',
+        source: srcId,
+        minzoom,
+        ...(maxzoom?{maxzoom}:{}),
+        paint: {
+          'line-color': '#3388ff',
+          'line-width': 6,
+          'line-opacity': [
+            'case',
+            ['boolean',['feature-state','hover'], false],
+            1,
+            0
+          ]
+        }
       });
 
       let hovered = null;
       map.on('mousemove', clickId, e => {
-        map.getCanvas().style.cursor='pointer';
-        if (hovered!==null) map.setFeatureState({source:srcId,id:hovered},{hover:false});
+        map.getCanvas().style.cursor = 'pointer';
+        if (hovered!==null) map.setFeatureState({ source: srcId, id: hovered }, { hover: false });
         hovered = e.features[0].id;
-        map.setFeatureState({source:srcId,id:hovered},{hover:true});
+        map.setFeatureState({ source: srcId, id: hovered }, { hover: true });
       });
-      map.on('mouseleave', clickId, _ => {
-        map.getCanvas().style.cursor='';
-        if (hovered!==null) map.setFeatureState({source:srcId,id:hovered},{hover:false});
+      map.on('mouseleave', clickId, () => {
+        map.getCanvas().style.cursor = '';
+        if (hovered!==null) map.setFeatureState({ source: srcId, id: hovered }, { hover: false });
         hovered = null;
       });
 
-      // fetch all features
-      const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
+      // fetch & draw features
+      const base  = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
       const query = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
-      let all = [], offset=0, more=true;
-      while(more){
+
+      let all = [], offset = 0, more = true;
+      while(more) {
         const resp = await fetch(`${query}&resultOffset=${offset}`);
         const js   = await resp.json();
         all = all.concat(js.features);
         more = js.exceededTransferLimit;
         offset += js.features.length;
       }
-      all.forEach((f,i)=>f.id=i);
-      map.getSource(srcId).setData({ type:'FeatureCollection', features:all });
+      all.forEach((f,i)=>f.id = i);
+      map.getSource(srcId).setData({ type:'FeatureCollection', features: all });
 
-      // click opens road popup
+      // click → road popup
       map.on('click', clickId, e => {
-        const ft = e.features[0].properties;
+        const P = e.features[0].properties;
         removeHighlight();
-        map.addSource('highlighted-road',{type:'geojson',data:e.features[0]});
-        map.addLayer({ id:'highlighted-road', type:'line', source:'highlighted-road',
-          paint:{ 'line-color':darkerColors[ft.ASTAND_YFIRBORD]||'#333','line-width':6 }
+        map.addSource('highlighted-road', { type:'geojson', data: e.features[0] });
+        map.addLayer({
+          id: 'highlighted-road',
+          type: 'line',
+          source: 'highlighted-road',
+          paint: {
+            'line-color': darkerColors[P.ASTAND_YFIRBORD] || '#333',
+            'line-width':   6
+          }
         });
 
         const html = `
@@ -130,8 +174,8 @@
                   background:#fff;color:#000;border-radius:5px;
                   padding:1px 8px;margin-right:8px;
                   font-size:13px;font-weight:bold;
-                ">${ft.NRVEGUR||'—'}</span>
-                ${ft.ASTAND_YFIRBORD}
+                ">${P.NRVEGUR||'—'}</span>
+                ${P.ASTAND_YFIRBORD}
               </div>
               <button onclick="this.closest('.maplibregl-popup').remove();removeHighlight();"
                 style="background:none;border:none;color:white;font-size:16px;cursor:pointer;">
@@ -143,11 +187,11 @@
               border-radius:0 0 8px 8px;
             ">
               <span style="
-                width:36px;height:12px;background:${statusColors[ft.ASTAND_YFIRBORD]};
+                width:36px;height:12px;background:${statusColors[P.ASTAND_YFIRBORD]};
                 border-radius:8px;margin-right:10px;
               "></span>
               <span style="font-size:15px;font-weight:600;">
-                ${statusText[ft.ASTAND_YFIRBORD]||'Unknown'}
+                ${statusText[P.ASTAND_YFIRBORD]||'Unknown'}
               </span>
             </div>
           </div>
@@ -159,89 +203,88 @@
       });
     }
 
+    // — load & cluster weather stations —
     async function loadWeather() {
-  const res  = await fetch(weatherURL);
-  const data = await res.json();
-  const stations = data
-    .map(i => ({
-      name: i.Nafn || 'Unknown',
-      temp: i.Hiti,
-      lon: +i.Lengd,
-      lat: +i.Breidd
-    }))
-    .filter(s => !isNaN(s.lon) && !isNaN(s.lat));
+      const res  = await fetch(weatherURL);
+      const data = await res.json();
+      const stations = data
+        .map(i => ({
+          name: i.Nafn || 'Unknown',
+          temp: i.Hiti,
+          lon: +i.Lengd,
+          lat: +i.Breidd
+        }))
+        .filter(s => !isNaN(s.lon) && !isNaN(s.lat));
 
-  // 1) add source with clustering
-  map.addSource('weather-stations', {
-    type: 'geojson',
-    data: {
-      type: 'FeatureCollection',
-      features: stations.map(s => ({
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [s.lon, s.lat] },
-        properties: { name: s.name, temp: s.temp }
-      }))
-    },
-    cluster: true,
-    clusterMaxZoom: 12,
-    clusterRadius: 60
-  });
+      // — 1) source with clustering only up to zoom 9 —
+      map.addSource('weather-stations', {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: stations.map(s => ({
+            type: 'Feature',
+            geometry: { type:'Point', coordinates:[s.lon,s.lat] },
+            properties:{ name:s.name, temp:s.temp }
+          }))
+        },
+        cluster: true,
+        clusterMaxZoom: CLUSTER_BREAK_Z - 1,  // ← clustering only up to zoom 9
+        clusterRadius: 60
+      });
 
-  // 1) cluster circles — only up to zoom 9
-  map.addLayer({
-    id: 'weather-clusters',
-    type: 'circle',
-    source: 'weather-stations',
-    filter: ['has', 'point_count'],
-    minzoom: 0,
-    maxzoom: CLUSTER_BREAK_Z - 1,    // hide at zoom ≥10
-    paint: {
-      'circle-color': '#3C8DFF',
-      'circle-radius': [
-        'step',
-        ['get','point_count'],
-        10,   10, 15,
-        30,  20,
-        50,  25
-      ]
+      // — 2) cluster circles, visible zoom 0–9 —
+      map.addLayer({
+        id: 'weather-clusters',
+        type: 'circle',
+        source: 'weather-stations',
+        filter: ['has','point_count'],
+        minzoom: 0,
+        maxzoom: CLUSTER_BREAK_Z - 1,
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': [
+            'step',
+            ['get','point_count'],
+            10,   10, 15,
+            30,  20,
+            50,  25
+          ]
+        }
+      });
+
+      // — 3) cluster-count labels, zoom 0–9 —
+      map.addLayer({
+        id: 'weather-cluster-count',
+        type: 'symbol',
+        source: 'weather-stations',
+        filter: ['has','point_count'],
+        minzoom: 0,
+        maxzoom: CLUSTER_BREAK_Z - 1,
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['Arial Unicode MS Bold'],
+          'text-size': 12
+        },
+        paint: { 'text-color': '#fff' }
+      });
+
+      // — 4) unclustered points, only zoom 10+ —
+      map.addLayer({
+        id: 'weather-unclustered-point',
+        type: 'circle',
+        source: 'weather-stations',
+        filter: ['!', ['has','point_count']],
+        minzoom: CLUSTER_BREAK_Z,
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': 6,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#fff'
+        }
+      });
     }
-  });
 
-  // 2) cluster count labels — only up to zoom 9
-  map.addLayer({
-    id: 'weather-cluster-count',
-    type: 'symbol',
-    source: 'weather-stations',
-    filter: ['has','point_count'],
-    minzoom: 0,
-    maxzoom: CLUSTER_BREAK_Z - 1,    // hide at zoom ≥10
-    layout: {
-      'text-field': '{point_count_abbreviated}',
-      'text-font': ['Arial Unicode MS Bold'],
-      'text-size': 12
-    },
-    paint: { 'text-color': '#fff' }
-  });
-
-  // 3) individual stations — only from zoom 10 up
-  map.addLayer({
-    id: 'weather-unclustered-point',
-    type: 'circle',
-    source: 'weather-stations',
-    filter: ['!', ['has','point_count']],
-    minzoom: CLUSTER_BREAK_Z,        // hide at zoom <10
-    paint: {
-      'circle-color': '#3C8DFF',
-      'circle-radius': 6,
-      'circle-stroke-width': 1,
-      'circle-stroke-color': '#fff'
-    }
-  });
-
-}
-
-
-    // — helper to build popup content —
+    // — popup HTML builder —
     function makeWeatherHTML(name, temp) {
       return `
         <div style="
@@ -259,10 +302,8 @@
         </div>`;
     }
 
-    // — clustering popup logic —
-    const weatherPopups   = [];
-    const CLUSTER_BREAK_Z = 10;
-
+    // — manage popups on zoom —
+    const weatherPopups = [];
     function clearWeatherPopups() {
       weatherPopups.forEach(p => p.remove());
       weatherPopups.length = 0;
@@ -273,7 +314,7 @@
       const z = map.getZoom();
 
       if (z < CLUSTER_BREAK_Z) {
-        // show one per cluster
+        // one popup per cluster
         const clusters = map.querySourceFeatures('weather-stations', { filter: ['has','point_count'] });
         for (let c of clusters) {
           const cid = c.properties.cluster_id;
@@ -290,10 +331,10 @@
           );
         }
       } else {
-        // show each station
-        const points = map.querySourceFeatures('weather-stations', { filter: ['!',['has','point_count']] });
-        for (let p of points) {
-          const { name,temp } = p.properties;
+        // one popup per individual station
+        const pts = map.querySourceFeatures('weather-stations', { filter: ['!',['has','point_count']] });
+        for (let p of pts) {
+          const { name, temp } = p.properties;
           weatherPopups.push(
             new maplibregl.Popup({ closeButton:false })
               .setLngLat(p.geometry.coordinates)
@@ -304,7 +345,7 @@
       }
     });
 
-    // — on load: fetch weather + roads + kick off popups —
+    // — on load: fetch weather + draw roads + kick off popups once —
     map.on('load', async () => {
       await loadWeather();
       map.once('idle', () => map.fire('zoomend'));
@@ -313,12 +354,12 @@
       await loadRoadLayer('high', 23, 9, 24);
     });
 
-    // — clean up popups if clicking elsewhere —
+    // — clear popups/highlights when clicking outside roads —
     map.on('click', (e) => {
-      const f = map.queryRenderedFeatures(e.point, {
+      const hit = map.queryRenderedFeatures(e.point, {
         layers: ['low-line-click','mid-line-click','high-line-click']
       });
-      if (!f.length) {
+      if (!hit.length) {
         removeHighlight();
         clearWeatherPopups();
       }
