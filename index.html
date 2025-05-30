@@ -5,7 +5,7 @@
   <title>Iceland Road & Weather Map</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link
-    href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibregl.css"
+    href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
     rel="stylesheet"
   />
   <style>
@@ -31,12 +31,12 @@
 
   <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibregl.js"></script>
   <script>
-    // ─── CONFIG ────────────────────────────────────────
-    const CLUSTER_BREAK_Z = 10;
-    const proxy      = 'https://road-conditions.vercel.app/api/proxy?url=';
-    const weatherURL = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
+    // ─── CONFIG ─────────────────────────────────────────
+    const CLUSTER_BREAK_Z = 10;  
+    const proxy       = 'https://road-conditions.vercel.app/api/proxy?url=';
+    const weatherURL  = proxy + encodeURIComponent('https://gagnaveita.vegagerdin.is/api/vedur2014_1');
 
-    // ─── INIT MAP ───────────────────────────────────────
+    // ─── INITIALIZE MAP ──────────────────────────────────
     const map = new maplibregl.Map({
       container: 'map',
       style: 'https://api.maptiler.com/maps/0196e78d-8743-7dbf-90f5-cbede6455991/style.json?key=pbPr4x1AY4Yr8ic8iItZ',
@@ -47,83 +47,83 @@
     });
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
-const statusColors = {
-      GREIDFAERT:'#00DF30', HALKA:'#00B7FF', HALKUBLETTIR:'#FCA433',
-      LOKAD:'#FF0000', OFAERT_VEDUR:'#FF0000', OFAERT_ANNAD:'#FF0000',
-      SNJOTHEKJA:'#FFFFFF', THAEFINGUR:'#FD7EFC', FAERT_FJALLABILUM:'#03DF30',
-      THUNGFAERT:'#3F3F3F', KRAP:'#9C9C9C', OTHEKKT:'#9C9C9C',
-      FLUGHALT:'#0000FF', EKKI_I_THJONUSTU:'#9C9C9C'
+    // ─── ROAD STYLES & HELPERS ───────────────────────────
+    const statusColors = {
+      'GREIDFAERT':'#00DF30','HALKA':'#00B7FF','HALKUBLETTIR':'#FCA433',
+      'LOKAD':'#FF0000','OFAERT_VEDUR':'#FF0000','OFAERT_ANNAD':'#FF0000',
+      'SNJOTHEKJA':'#FFFFFF','THAEFINGUR':'#FD7EFC','FAERT_FJALLABILUM':'#03DF30',
+      'THUNGFAERT':'#3F3F3F','KRAP':'#9C9C9C','OTHEKKT':'#9C9C9C',
+      'FLUGHALT':'#0000FF','EKKI_I_THJONUSTU':'#9C9C9C'
     };
     const darkerColors = {
-      GREIDFAERT:'#008b1a', HALKA:'#005b99', HALKUBLETTIR:'#c17300',
-      LOKAD:'#800000', OFAERT_VEDUR:'#800000', OFAERT_ANNAD:'#800000',
-      SNJOTHEKJA:'#cccccc', THAEFINGUR:'#d150d1', FAERT_FJALLABILUM:'#027f17',
-      THUNGFAERT:'#1f1f1f', KRAP:'#6a6a6a', OTHEKKT:'#6a6a6a',
-      FLUGHALT:'#000099', EKKI_I_THJONUSTU:'#6a6a6a'
+      'GREIDFAERT':'#008b1a','HALKA':'#005b99','HALKUBLETTIR':'#c17300',
+      'LOKAD':'#800000','OFAERT_VEDUR':'#800000','OFAERT_ANNAD':'#800000',
+      'SNJOTHEKJA':'#cccccc','THAEFINGUR':'#d150d1','FAERT_FJALLABILUM':'#027f17',
+      'THUNGFAERT':'#1f1f1f','KRAP':'#6a6a6a','OTHEKKT':'#6a6a6a',
+      'FLUGHALT':'#000099','EKKI_I_THJONUSTU':'#6a6a6a'
     };
     const statusText = {
-      GREIDFAERT:'Easily passable', HALKA:'Slippery', HALKUBLETTIR:'Some slippery spots',
-      LOKAD:'Closed', OFAERT_VEDUR:'Impassable due to weather', OFAERT_ANNAD:'Impassable',
-      SNJOTHEKJA:'Snow covered', THAEFINGUR:'Drift snow', FAERT_FJALLABILUM:'Only 4×4',
-      THUNGFAERT:'Heavy traffic', KRAP:'Slush', OTHEKKT:'Unknown',
-      FLUGHALT:'Extremely slippery', EKKI_I_THJONUSTU:'Out of service'
+      'GREIDFAERT':'Easily passable','HALKA':'Slippery','HALKUBLETTIR':'Some slippery spots',
+      'LOKAD':'Closed','OFAERT_VEDUR':'Impassable due to weather','OFAERT_ANNAD':'Impassable',
+      'SNJOTHEKJA':'Snow covered','THAEFINGUR':'Drift snow','FAERT_FJALLABILUM':'Only passable by 4x4',
+      'THUNGFAERT':'Heavy traffic','KRAP':'Slush','OTHEKKT':'Unknown',
+      'FLUGHALT':'Extremely slippery','EKKI_I_THJONUSTU':'Out of service'
     };
-  
-    
     function removeHighlight() {
       if (map.getLayer('highlighted-road')) map.removeLayer('highlighted-road');
       if (map.getSource('highlighted-road')) map.removeSource('highlighted-road');
     }
 
-    // ─── LOAD ROADS ──────────────────────────────────────
+    // ─── LOAD ROAD LAYERS ────────────────────────────────
     async function loadRoadLayer(id, arcgisId, minz, maxz) {
-      const src = `road-${id}`, line = `${id}-line`, clk = `${line}-click`, hov = `${line}-hover`;
+      const src   = `road-${id}`,
+            line  = `${id}-line`,
+            click = `${line}-click`,
+            hov   = `${line}-hover`;
+
       map.addSource(src, { type:'geojson', data:{ type:'FeatureCollection', features:[] } });
-      map.addLayer({ id:line, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
+      map.addLayer({ id:line,  type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
         paint:{ 'line-color':['match',['get','ASTAND_YFIRBORD'], ...Object.entries(statusColors).flat(), '#000'], 'line-width':4 }
       });
-      map.addLayer({ id:clk,  type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
+      map.addLayer({ id:click, type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
         paint:{ 'line-color':'#000','line-opacity':0,'line-width':10 }
       });
-      map.addLayer({ id:hov,  type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
-        paint:{
-          'line-color':'#3388ff','line-width':6,
-          'line-opacity':['case',['boolean',['feature-state','hover'],false],1,0]
-        }
+      map.addLayer({ id:hov,   type:'line', source:src, minzoom:minz, ...(maxz?{maxzoom:maxz}:{}),
+        paint:{ 'line-color':'#3388ff','line-width':6, 'line-opacity':['case',['boolean',['feature-state','hover'],false],1,0] }
       });
 
       let hovered = null;
-      map.on('mousemove', clk, e => {
-        map.getCanvas().style.cursor='pointer';
+      map.on('mousemove', click, e => {
+        map.getCanvas().style.cursor = 'pointer';
         if (hovered!==null) map.setFeatureState({ source:src, id:hovered },{ hover:false });
         hovered = e.features[0].id;
         map.setFeatureState({ source:src, id:hovered },{ hover:true });
       });
-      map.on('mouseleave', clk, () => {
-        map.getCanvas().style.cursor='';
+      map.on('mouseleave', click, () => {
+        map.getCanvas().style.cursor = '';
         if (hovered!==null) map.setFeatureState({ source:src, id:hovered },{ hover:false });
         hovered = null;
       });
 
-      // fetch pages
+      // fetch & combine paged features
       const base = `https://vegasja.vegagerdin.is/arcgis/rest/services/appfaerd/faerd1_2/MapServer/${arcgisId}`;
       const Q    = `${base}/query?where=1%3D1&outFields=NRVEGUR,ASTAND_YFIRBORD&outSR=4326&f=geojson&resultRecordCount=1000`;
       let all = [], offset=0, more=true;
-      while(more){
+      while (more) {
         const r = await fetch(`${Q}&resultOffset=${offset}`);
         const j = await r.json();
         all = all.concat(j.features);
         more = j.exceededTransferLimit;
         offset += j.features.length;
       }
-      all.forEach((f,i)=>f.id=i);
+      all.forEach((f,i)=>f.id = i);
       map.getSource(src).setData({ type:'FeatureCollection', features:all });
 
-      // click → popup
-      map.on('click', clk, e => {
+      // click → styled road-popup
+      map.on('click', click, e => {
         const P = e.features[0].properties;
         removeHighlight();
-        map.addSource('highlighted-road',{ type:'geojson', data:e.features[0] });
+        map.addSource('highlighted-road', { type:'geojson', data:e.features[0] });
         map.addLayer({
           id:'highlighted-road', type:'line', source:'highlighted-road',
           paint:{ 'line-color':darkerColors[P.ASTAND_YFIRBORD], 'line-width':6 }
@@ -167,65 +167,81 @@ const statusColors = {
       });
     }
 
-    // ─── LOAD WEATHER ───────────────────────────────────
+    // ─── LOAD WEATHER & CLUSTERS ────────────────────────
     async function loadWeather() {
-      const res = await fetch(weatherURL);
+      const res  = await fetch(weatherURL);
       const data = await res.json();
 
       const stations = data
         .map(i => ({
           name: i.Nafn,
           temp:  i.Hiti,
-          // ← adjust this if the real field is e.g. 'Vindhraði' or 'Vindstel'
-          wind:  i.Vindhraedi ?? i.Vindhraði ?? '–',
+          wind:  i.Vindhraedi ?? '–',
           lon:   parseFloat(i.Lengd),
           lat:   parseFloat(i.Breidd)
         }))
-        .filter(s => !isNaN(s.lon)&&!isNaN(s.lat));
+        .filter(s => !isNaN(s.lon) && !isNaN(s.lat));
 
       map.addSource('weather-stations', {
-        type:'geojson',
-        data:{ type:'FeatureCollection', features:stations.map(s=>({
-          type:'Feature',
-          geometry:{ type:'Point',coordinates:[s.lon,s.lat] },
-          properties:{ name:s.name, temp:s.temp, wind:s.wind }
-        }))},
-        cluster:true,
-        clusterMaxZoom:CLUSTER_BREAK_Z-1,
-        clusterRadius:50
-      });
-
-      // cluster circles 0–9
-      map.addLayer({
-        id:'weather-clusters', type:'circle', source:'weather-stations',
-        filter:['has','point_count'], minzoom:0, maxzoom:CLUSTER_BREAK_Z-1,
-        layout:{ visibility:'none' },
-        paint:{ 'circle-color':'#3C8DFF', 'circle-radius':['step',['get','point_count'],10,10,15,30,20,50,25] }
-      });
-
-      // cluster count labels 0–9
-      map.addLayer({
-        id:'weather-cluster-count', type:'symbol', source:'weather-stations',
-        filter:['has','point_count'], minzoom:0, maxzoom:CLUSTER_BREAK_Z-1,
-        layout:{
-          visibility:'none',
-          'text-field':'{point_count_abbreviated}',
-          'text-font':['Arial Unicode MS Bold'],
-          'text-size':12
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: stations.map(s => ({
+            type: 'Feature',
+            geometry: { type:'Point', coordinates:[s.lon,s.lat] },
+            properties: { name:s.name, temp:s.temp, wind:s.wind }
+          }))
         },
-        paint:{ 'text-color':'#fff' }
+        cluster: true,
+        clusterMaxZoom: CLUSTER_BREAK_Z - 1,
+        clusterRadius: 50
       });
 
-      // single points 10+
+      // clustered circles (zoom 0–9), hidden initially
       map.addLayer({
-        id:'weather-unclustered-point', type:'circle', source:'weather-stations',
-        filter:['!',['has','point_count']], minzoom:CLUSTER_BREAK_Z,
-        layout:{ visibility:'none' },
-        paint:{
-          'circle-color':'#3C8DFF',
-          'circle-radius':6,
-          'circle-stroke-width':1,
-          'circle-stroke-color':'#fff'
+        id: 'weather-clusters',
+        type: 'circle',
+        source: 'weather-stations',
+        filter: ['has','point_count'],
+        minzoom: 0,
+        maxzoom: CLUSTER_BREAK_Z - 1,
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': ['step',['get','point_count'],10, 10,15, 30,20, 50,25]
+        }
+      });
+
+      // cluster counts (zoom 0–9)
+      map.addLayer({
+        id: 'weather-cluster-count',
+        type: 'symbol',
+        source: 'weather-stations',
+        filter: ['has','point_count'],
+        minzoom: 0,
+        maxzoom: CLUSTER_BREAK_Z - 1,
+        layout: {
+          visibility: 'none',
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['Arial Unicode MS Bold'],
+          'text-size': 12
+        },
+        paint: { 'text-color': '#fff' }
+      });
+
+      // single-point circles (zoom ≥10), hidden initially
+      map.addLayer({
+        id: 'weather-unclustered-point',
+        type: 'circle',
+        source: 'weather-stations',
+        filter: ['!', ['has','point_count']],
+        minzoom: CLUSTER_BREAK_Z,
+        layout: { visibility: 'none' },
+        paint: {
+          'circle-color': '#3C8DFF',
+          'circle-radius': 6,
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#fff'
         }
       });
     }
@@ -235,19 +251,19 @@ const statusColors = {
       return `
         <div style="
           font-family:sans-serif;
-          padding:8px 12px;
           background:#fff;
+          padding:8px 12px;
           border-radius:8px;
           box-shadow:0 2px 6px rgba(0,0,0,0.1);
         ">
-          <div style="font-size:20px; font-weight:bold; margin-bottom:6px;">
+          <div style="font-size:20px;font-weight:bold;margin-bottom:6px;">
             ${name}
           </div>
-          <div style="font-size:18px; display:flex; align-items:center;">
+          <div style="display:flex;align-items:center;font-size:18px;">
             <div>${temp}°C</div>
             <div style="margin:0 12px;">|</div>
-            <div style="display:flex; align-items:center;">
-              <span style="font-size:20px; margin-right:6px;">→</span>
+            <div style="display:flex;align-items:center;">
+              <span style="font-size:20px;margin-right:6px;">→</span>
               <span>${wind} m/s</span>
             </div>
           </div>
@@ -255,7 +271,7 @@ const statusColors = {
     }
     const weatherPopups = [];
     function clearWeatherPopups() {
-      weatherPopups.forEach(p => p.remove());
+      weatherPopups.forEach(p=>p.remove());
       weatherPopups.length = 0;
     }
 
@@ -265,9 +281,9 @@ const statusColors = {
       const z = map.getZoom();
 
       if (z < CLUSTER_BREAK_Z) {
-        const clusters = map.querySourceFeatures('weather-stations',{filter:['has','point_count']});
+        const clusters = map.querySourceFeatures('weather-stations',{ filter:['has','point_count'] });
         for (let c of clusters) {
-          const leaves = await new Promise(res=>
+          const leaves = await new Promise(res =>
             map.getSource('weather-stations')
                .getClusterLeaves(c.properties.cluster_id,1,0,(e,a)=>res(a))
           );
@@ -281,7 +297,7 @@ const statusColors = {
           );
         }
       } else {
-        const pts = map.querySourceFeatures('weather-stations',{filter:['!',['has','point_count']]});
+        const pts = map.querySourceFeatures('weather-stations',{ filter:['!',['has','point_count']] });
         for (let p of pts) {
           const { name, temp, wind } = p.properties;
           weatherPopups.push(
@@ -294,29 +310,26 @@ const statusColors = {
       }
     });
 
-    // ─── BOOTSTRAP EVERYTHING ────────────────────────────
+    // ─── ON LOAD: ROADS → WEATHER → TOGGLE ─────────────────
     map.on('load', async () => {
-      // 1) Roads first
       await loadRoadLayer('low',  21,  0,  6);
       await loadRoadLayer('mid',  22,  5, 10);
       await loadRoadLayer('high', 23,  9, 24);
-
-      // 2) Weather layers
       await loadWeather();
 
-      // 3) Toggle handler
-      document.getElementById('weather-toggle').addEventListener('change', e => {
-        const v = e.target.checked ? 'visible' : 'none';
-        ['weather-clusters','weather-cluster-count','weather-unclustered-point']
-          .forEach(id => map.setLayoutProperty(id,'visibility',v));
-        clearWeatherPopups();
-        if (e.target.checked) map.fire('zoomend');
-      });
+      document.getElementById('weather-toggle')
+        .addEventListener('change', e => {
+          const v = e.target.checked ? 'visible' : 'none';
+          ['weather-clusters','weather-cluster-count','weather-unclustered-point']
+            .forEach(id => map.setLayoutProperty(id,'visibility',v));
+          clearWeatherPopups();
+          if (e.target.checked) map.fire('zoomend');
+        });
     });
 
-    // ─── CLEAN UP ON OUTSIDE CLICK ───────────────────────
+    // ─── CLEAN UP ON OUTSIDE CLICK ────────────────────────
     map.on('click', e => {
-      const hits = map.queryRenderedFeatures(e.point, {
+      const hits = map.queryRenderedFeatures(e.point,{
         layers:['low-line-click','mid-line-click','high-line-click']
       });
       if (!hits.length) {
