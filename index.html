@@ -313,40 +313,48 @@ map.addLayer({
     }
 
     map.on('zoomend', async () => {
-      clearWeatherPopups();
-      const z = map.getZoom();
+  const z = map.getZoom();
+  // 1) if we’re too far out, clear and bail
+  if (z < CLUSTER_SHOW_Z) {
+    clearWeatherPopups();
+    return;
+  }
 
-      if (z < CLUSTER_BREAK_Z) {
-        // one popup per cluster
-        const clusters = map.querySourceFeatures('weather-stations', { filter: ['has','point_count'] });
-        for (let c of clusters) {
-          const cid = c.properties.cluster_id;
-          const leaves = await new Promise(res =>
-            map.getSource('weather-stations').getClusterLeaves(cid, 1, 0, (err, arr) => res(arr))
-          );
-          if (!leaves.length) continue;
-          const { name, temp } = leaves[0].properties;
-          weatherPopups.push(
-            new maplibregl.Popup({ closeButton:false })
-              .setLngLat(c.geometry.coordinates)
-              .setHTML(makeWeatherHTML(name,temp))
-              .addTo(map)
-          );
-        }
-      } else {
-        // one popup per individual station
-        const pts = map.querySourceFeatures('weather-stations', { filter: ['!',['has','point_count']] });
-        for (let p of pts) {
-          const { name, temp } = p.properties;
-          weatherPopups.push(
-            new maplibregl.Popup({ closeButton:false })
-              .setLngLat(p.geometry.coordinates)
-              .setHTML(makeWeatherHTML(name,temp))
-              .addTo(map)
-          );
-        }
-      }
-    });
+  // 2) otherwise clear old popups and draw fresh
+  clearWeatherPopups();
+
+  if (z < CLUSTER_BREAK_Z) {
+    // cluster‐popup code…
+    const clusters = map.querySourceFeatures('weather-stations', { filter: ['has','point_count'] });
+    for (let c of clusters) {
+      const leaves = await new Promise(res =>
+        map.getSource('weather-stations')
+           .getClusterLeaves(c.properties.cluster_id, 1, 0, (e, arr) => res(arr))
+      );
+      if (!leaves.length) continue;
+      const { name, temp } = leaves[0].properties;
+      weatherPopups.push(
+        new maplibregl.Popup({ closeButton:false })
+          .setLngLat(c.geometry.coordinates)
+          .setHTML(makeWeatherHTML(name,temp))
+          .addTo(map)
+      );
+    }
+  } else {
+    // individual‐station popup code…
+    const pts = map.querySourceFeatures('weather-stations', { filter: ['!',['has','point_count']] });
+    for (let p of pts) {
+      const { name, temp } = p.properties;
+      weatherPopups.push(
+        new maplibregl.Popup({ closeButton:false })
+          .setLngLat(p.geometry.coordinates)
+          .setHTML(makeWeatherHTML(name,temp))
+          .addTo(map)
+      );
+    }
+  }
+});
+
 
     // — on load: fetch weather + draw roads + kick off popups once —
     map.on('load', async () => {
