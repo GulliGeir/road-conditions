@@ -284,9 +284,18 @@
         const { temp, name } = weatherHits[0].properties;
         new maplibregl.Popup()
           .setLngLat(weatherHits[0].geometry.coordinates)
-          .setHTML(`<strong>${name}</strong><br>🌡️ ${temp} °C`)
-          .addTo(map);
-      });
+          .setHTML(`
+            <div style="font-family:sans-serif; font-size:14px; color:#000; background:#fff; padding:12px 16px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+            <div style="font-weight:bold; font-size:16px; margin-bottom:6px;">${name}</div>
+            <div style="display:flex; align-items:center;">
+            <img src="https://cdn-icons-png.flaticon.com/512/728/728093.png" alt="thermometer" style="width:18px; height:18px; margin-right:6px;" />
+            <span style="font-size:20px; font-weight:bold;">${temp} °C</span>
+            <span style="margin-left:auto; font-size:18px;">→</span>
+            /div>
+          </div>
+          `)
+        .addTo(map);
+          });
     }
 
     map.on('load', async () => {
